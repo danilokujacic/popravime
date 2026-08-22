@@ -21,7 +21,9 @@ export class CitiesController {
 
   @Public()
   @Get(':id')
-  async FindOne(@Param('id', ParseUUIDPipe) id: string): Promise<CityResponseDto> {
+  async FindOne(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CityResponseDto> {
     const city = await this.citiesService.FindById(id);
     return CityResponseMapper.ToDto(city);
   }

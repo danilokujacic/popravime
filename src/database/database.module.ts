@@ -8,7 +8,8 @@ import { BuildDataSourceOptions } from './data-source-options';
   imports: [
     TypeOrmModule.forRootAsync({
       inject: [databaseConfig.KEY],
-      useFactory: (config: ConfigType<typeof databaseConfig>) => BuildDataSourceOptions(config),
+      useFactory: (config: ConfigType<typeof databaseConfig>) =>
+        BuildDataSourceOptions(config),
     }),
   ],
 })

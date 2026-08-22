@@ -21,13 +21,13 @@ function BuildService(overrides?: {
     ...overrides?.passwordHasher,
   } as unknown as PasswordHasher;
 
-  const jwtService = { signAsync: jest.fn().mockResolvedValue('signed-token') } as unknown as ConstructorParameters<
-    typeof AuthService
-  >[2];
+  const jwtService = {
+    signAsync: jest.fn().mockResolvedValue('signed-token'),
+  } as unknown as ConstructorParameters<typeof AuthService>[2];
 
-  const emailQueueService = { Enqueue: jest.fn().mockResolvedValue(undefined) } as unknown as ConstructorParameters<
-    typeof AuthService
-  >[3];
+  const emailQueueService = {
+    Enqueue: jest.fn().mockResolvedValue(undefined),
+  } as unknown as ConstructorParameters<typeof AuthService>[3];
 
   const config = {
     accessSecret: 'access-secret',
@@ -36,9 +36,10 @@ function BuildService(overrides?: {
     refreshExpiresInSeconds: 604800,
   };
 
-  const logger = { warn: jest.fn(), info: jest.fn() } as unknown as ConstructorParameters<
-    typeof AuthService
-  >[5];
+  const logger = {
+    warn: jest.fn(),
+    info: jest.fn(),
+  } as unknown as ConstructorParameters<typeof AuthService>[5];
 
   const service = new AuthService(
     usersService,
@@ -56,7 +57,9 @@ describe('AuthService', () => {
   describe('Register', () => {
     it('rejects registration when the email is already taken', async () => {
       const { service, usersService } = BuildService({
-        usersService: { FindByEmail: jest.fn().mockResolvedValue({ id: 'existing-user' }) },
+        usersService: {
+          FindByEmail: jest.fn().mockResolvedValue({ id: 'existing-user' }),
+        },
       });
 
       await expect(
@@ -91,7 +94,10 @@ describe('AuthService', () => {
       });
 
       expect(usersService.Register).toHaveBeenCalled();
-      expect(result).toEqual({ accessToken: 'signed-token', refreshToken: 'signed-token' });
+      expect(result).toEqual({
+        accessToken: 'signed-token',
+        refreshToken: 'signed-token',
+      });
     });
   });
 
@@ -102,7 +108,10 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.Login({ email: 'unknown@popravime.me', password: 'password123' }),
+        service.Login({
+          email: 'unknown@popravime.me',
+          password: 'password123',
+        }),
       ).rejects.toBeInstanceOf(DomainUnauthorizedException);
     });
 
@@ -120,7 +129,10 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.Login({ email: 'ana@popravime.me', password: 'wrong-password' }),
+        service.Login({
+          email: 'ana@popravime.me',
+          password: 'wrong-password',
+        }),
       ).rejects.toBeInstanceOf(DomainUnauthorizedException);
     });
 
@@ -142,7 +154,10 @@ describe('AuthService', () => {
         password: 'password123',
       });
 
-      expect(result).toEqual({ accessToken: 'signed-token', refreshToken: 'signed-token' });
+      expect(result).toEqual({
+        accessToken: 'signed-token',
+        refreshToken: 'signed-token',
+      });
     });
   });
 });

@@ -22,7 +22,9 @@ describe('RolesGuard', () => {
   };
 
   it('allows access when no roles metadata is present', () => {
-    const reflector = { getAllAndOverride: () => undefined } as unknown as Reflector;
+    const reflector = {
+      getAllAndOverride: () => undefined,
+    } as unknown as Reflector;
     const guard = new RolesGuard(reflector);
 
     expect(guard.canActivate(BuildContext(user))).toBe(true);

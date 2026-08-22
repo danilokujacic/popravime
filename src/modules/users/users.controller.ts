@@ -11,7 +11,9 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get('me')
-  async GetMe(@CurrentUser() currentUser: AuthenticatedUser): Promise<UserResponseDto> {
+  async GetMe(
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ): Promise<UserResponseDto> {
     const user = await this.usersService.FindById(currentUser.id);
     return UserResponseMapper.ToDto(user);
   }

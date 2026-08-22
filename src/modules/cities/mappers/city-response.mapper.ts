@@ -2,7 +2,7 @@ import { City } from '../entities/city.entity';
 import { CityResponseDto } from '../dto/city-response.dto';
 
 export class CityResponseMapper {
-  static ToDto(city: City): CityResponseDto {
+  static ToDto(this: void, city: City): CityResponseDto {
     const dto = new CityResponseDto();
     dto.id = city.id;
     dto.name = city.name;

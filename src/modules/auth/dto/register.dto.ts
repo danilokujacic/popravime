@@ -1,5 +1,13 @@
 import { Expose } from 'class-transformer';
-import { IsEmail, IsIn, IsOptional, IsPhoneNumber, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsPhoneNumber,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { UserRole } from '../../users/users.types';
 
 const REGISTERABLE_ROLES = [UserRole.Customer, UserRole.ProviderOwner] as const;

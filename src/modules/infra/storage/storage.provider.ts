@@ -7,5 +7,6 @@ import { STORAGE_SERVICE } from '../../../common/constants/di-tokens';
 export const StorageProvider: FactoryProvider = {
   provide: STORAGE_SERVICE,
   inject: [storageConfig.KEY],
-  useFactory: (config: ConfigType<typeof storageConfig>) => new S3StorageService(config),
+  useFactory: (config: ConfigType<typeof storageConfig>) =>
+    new S3StorageService(config),
 };

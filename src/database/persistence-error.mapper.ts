@@ -18,7 +18,11 @@ interface ConflictMapping {
 }
 
 const CONFLICT_MAPPINGS: ConflictMapping[] = [
-  { constraint: 'users_email_key', code: 'EMAIL_TAKEN', message: 'Email is already registered' },
+  {
+    constraint: 'users_email_key',
+    code: 'EMAIL_TAKEN',
+    message: 'Email is already registered',
+  },
   {
     constraint: 'providers_slug_key',
     code: 'PROVIDER_SLUG_TAKEN',
@@ -40,8 +44,14 @@ function IsPostgresDriverError(value: unknown): value is PostgresDriverError {
   return typeof value === 'object' && value !== null && 'code' in value;
 }
 
+export function IsQueryFailedError(error: unknown): error is QueryFailedError {
+  return error instanceof QueryFailedError;
+}
+
 function MapUniqueViolation(constraint: string | undefined): DomainException {
-  const mapping = CONFLICT_MAPPINGS.find((entry) => entry.constraint === constraint);
+  const mapping = CONFLICT_MAPPINGS.find(
+    (entry) => entry.constraint === constraint,
+  );
   if (!mapping) {
     return new DomainConflictException(
       'PERSISTENCE_CONFLICT',
@@ -56,7 +66,10 @@ export class PersistenceErrorMapper {
     const driverError: unknown = error.driverError;
 
     if (!IsPostgresDriverError(driverError)) {
-      return new DomainConflictException('PERSISTENCE_CONFLICT', 'Unexpected persistence error');
+      return new DomainConflictException(
+        'PERSISTENCE_CONFLICT',
+        'Unexpected persistence error',
+      );
     }
 
     if (driverError.code === UNIQUE_VIOLATION) {
@@ -70,6 +83,9 @@ export class PersistenceErrorMapper {
       );
     }
 
-    return new DomainConflictException('PERSISTENCE_CONFLICT', 'Unexpected persistence error');
+    return new DomainConflictException(
+      'PERSISTENCE_CONFLICT',
+      'Unexpected persistence error',
+    );
   }
 }

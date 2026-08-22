@@ -12,12 +12,18 @@ export enum RequestStatus {
   Cancelled = 'cancelled',
 }
 
+export interface RepairRequestPhotoInput {
+  buffer: Buffer;
+  fileName: string;
+  contentType: string;
+}
+
 export interface CreateRepairRequestInput {
   categoryId: string;
   brand?: string;
   model?: string;
   description: string;
-  photoUrls?: string[];
+  photos?: RepairRequestPhotoInput[];
   cityId: string;
   urgency: Urgency;
 }

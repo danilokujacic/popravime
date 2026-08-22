@@ -2,7 +2,7 @@ import { Provider } from '../entities/provider.entity';
 import { ProviderResponseDto } from '../dto/provider-response.dto';
 
 export class ProviderResponseMapper {
-  static ToDto(provider: Provider): ProviderResponseDto {
+  static ToDto(this: void, provider: Provider): ProviderResponseDto {
     const dto = new ProviderResponseDto();
     dto.id = provider.id;
     dto.ownerUserId = provider.ownerUserId;

@@ -7,12 +7,9 @@ export interface ThrottleConfig {
   authTtlMs: number;
 }
 
-export const throttleConfig = registerAs(
-  'throttle',
-  (): ThrottleConfig => ({
-    defaultLimit: Number(process.env.THROTTLE_DEFAULT_LIMIT ?? 100),
-    defaultTtlMs: Number(process.env.THROTTLE_DEFAULT_TTL_MS ?? 60000),
-    authLimit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
-    authTtlMs: Number(process.env.THROTTLE_AUTH_TTL_MS ?? 60000),
-  }),
-);
+export const throttleConfig = registerAs('throttle', (): ThrottleConfig => ({
+  defaultLimit: Number(process.env.THROTTLE_DEFAULT_LIMIT ?? 100),
+  defaultTtlMs: Number(process.env.THROTTLE_DEFAULT_TTL_MS ?? 60000),
+  authLimit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
+  authTtlMs: Number(process.env.THROTTLE_AUTH_TTL_MS ?? 60000),
+}));

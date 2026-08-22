@@ -10,14 +10,19 @@ export class ProviderCategoryRepository {
     private readonly repository: Repository<ProviderCategory>,
   ) {}
 
-  async ReplaceForProvider(providerId: string, categoryIds: string[]): Promise<void> {
+  async ReplaceForProvider(
+    providerId: string,
+    categoryIds: string[],
+  ): Promise<void> {
     await this.repository.delete({ providerId });
 
     if (categoryIds.length === 0) {
       return;
     }
 
-    const rows = categoryIds.map((categoryId) => this.repository.create({ providerId, categoryId }));
+    const rows = categoryIds.map((categoryId) =>
+      this.repository.create({ providerId, categoryId }),
+    );
     await this.repository.save(rows);
   }
 

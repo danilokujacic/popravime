@@ -10,3 +10,19 @@ export enum OfferStatus {
   Rejected = 'rejected',
   Withdrawn = 'withdrawn',
 }
+
+export interface CreateOfferInput {
+  requestId: string;
+  providerId: string;
+  priceMin: string;
+  priceMax: string;
+  estimatedDuration: string;
+  partsType: PartsType;
+  message?: string;
+}
+
+export interface ListOffersFilter {
+  requestId?: string;
+  providerId?: string;
+  status?: OfferStatus;
+}

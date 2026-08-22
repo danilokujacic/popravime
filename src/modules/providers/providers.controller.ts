@@ -66,7 +66,9 @@ export class ProvidersController {
 
   @Public()
   @Get(':id')
-  async FindOne(@Param('id', ParseUUIDPipe) id: string): Promise<ProviderResponseDto> {
+  async FindOne(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ProviderResponseDto> {
     const provider = await this.providersService.FindById(id);
     return ProviderResponseMapper.ToDto(provider);
   }

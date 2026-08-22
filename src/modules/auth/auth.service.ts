@@ -31,8 +31,14 @@ export class AuthService implements IAuthService {
   async Register(input: CreateUserInput): Promise<TokenPair> {
     const existing = await this.usersService.FindByEmail(input.email);
     if (existing) {
-      this.logger.warn({ email: input.email }, 'Registration attempted with existing email');
-      throw new DomainConflictException('EMAIL_TAKEN', 'Email is already registered');
+      this.logger.warn(
+        { email: input.email },
+        'Registration attempted with existing email',
+      );
+      throw new DomainConflictException(
+        'EMAIL_TAKEN',
+        'Email is already registered',
+      );
     }
 
     const user = await this.usersService.Register(input);
@@ -49,8 +55,14 @@ export class AuthService implements IAuthService {
   async Login(input: LoginInput): Promise<TokenPair> {
     const credentials = await this.usersService.FindCredentials(input.email);
     if (!credentials) {
-      this.logger.warn({ email: input.email }, 'Login attempted for unknown email');
-      throw new DomainUnauthorizedException('INVALID_CREDENTIALS', 'Invalid email or password');
+      this.logger.warn(
+        { email: input.email },
+        'Login attempted for unknown email',
+      );
+      throw new DomainUnauthorizedException(
+        'INVALID_CREDENTIALS',
+        'Invalid email or password',
+      );
     }
 
     const passwordMatches = await this.passwordHasher.Verify(
@@ -58,13 +70,23 @@ export class AuthService implements IAuthService {
       credentials.passwordHash,
     );
     if (!passwordMatches) {
-      this.logger.warn({ userId: credentials.id }, 'Login attempted with invalid password');
-      throw new DomainUnauthorizedException('INVALID_CREDENTIALS', 'Invalid email or password');
+      this.logger.warn(
+        { userId: credentials.id },
+        'Login attempted with invalid password',
+      );
+      throw new DomainUnauthorizedException(
+        'INVALID_CREDENTIALS',
+        'Invalid email or password',
+      );
     }
 
     this.logger.info({ userId: credentials.id }, 'User logged in');
 
-    return this.IssueTokens(credentials.id, credentials.email, credentials.role);
+    return this.IssueTokens(
+      credentials.id,
+      credentials.email,
+      credentials.role,
+    );
   }
 
   Refresh(user: AuthenticatedUser): Promise<TokenPair> {
@@ -72,7 +94,11 @@ export class AuthService implements IAuthService {
     return this.IssueTokens(user.id, user.email, user.role);
   }
 
-  private async IssueTokens(userId: string, email: string, role: UserRole): Promise<TokenPair> {
+  private async IssueTokens(
+    userId: string,
+    email: string,
+    role: UserRole,
+  ): Promise<TokenPair> {
     const payload: JwtPayload = { sub: userId, email, role };
 
     const [accessToken, refreshToken] = await Promise.all([

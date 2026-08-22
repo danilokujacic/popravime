@@ -17,6 +17,8 @@ interface ErrorBody {
   timestamp: string;
 }
 
+const SERVER_ERROR_THRESHOLD: number = HttpStatus.INTERNAL_SERVER_ERROR;
+
 interface HttpExceptionBody {
   message?: string | string[];
 }
@@ -76,7 +78,13 @@ export class DomainExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       const { code, message } = ExtractHttpBody(exception);
-      return { code, message, statusCode: exception.getStatus(), path, timestamp };
+      return {
+        code,
+        message,
+        statusCode: exception.getStatus(),
+        path,
+        timestamp,
+      };
     }
 
     return {
@@ -88,7 +96,11 @@ export class DomainExceptionFilter implements ExceptionFilter {
     };
   }
 
-  private LogException(exception: unknown, errorBody: ErrorBody, ip: string | undefined): void {
+  private LogException(
+    exception: unknown,
+    errorBody: ErrorBody,
+    ip: string | undefined,
+  ): void {
     const logPayload = {
       code: errorBody.code,
       statusCode: errorBody.statusCode,
@@ -96,9 +108,12 @@ export class DomainExceptionFilter implements ExceptionFilter {
       ip,
     };
 
-    if (errorBody.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (errorBody.statusCode >= SERVER_ERROR_THRESHOLD) {
       this.logger.error(
-        { ...logPayload, stack: exception instanceof Error ? exception.stack : undefined },
+        {
+          ...logPayload,
+          stack: exception instanceof Error ? exception.stack : undefined,
+        },
         errorBody.message,
       );
       return;

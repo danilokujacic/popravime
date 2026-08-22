@@ -11,7 +11,9 @@ export class SmtpEmailService implements EmailService {
       host: config.host,
       port: config.port,
       secure: config.secure,
-      auth: config.user ? { user: config.user, pass: config.password } : undefined,
+      auth: config.user
+        ? { user: config.user, pass: config.password }
+        : undefined,
     });
   }
 

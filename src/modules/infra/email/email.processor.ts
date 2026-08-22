@@ -4,7 +4,10 @@ import { Job } from 'bullmq';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import type { EmailService } from './email.service.interface';
 import { EmailJob } from './email.types';
-import { EMAIL_QUEUE_NAME, EMAIL_SERVICE } from '../../../common/constants/di-tokens';
+import {
+  EMAIL_QUEUE_NAME,
+  EMAIL_SERVICE,
+} from '../../../common/constants/di-tokens';
 import { BuildWelcomeEmail } from './templates/welcome.template';
 import { BuildOfferReceivedEmail } from './templates/offer-received.template';
 import { BuildOfferAcceptedEmail } from './templates/offer-accepted.template';
@@ -39,7 +42,10 @@ export class EmailProcessor extends WorkerHost {
   async process(job: Job<EmailJob>): Promise<void> {
     const content = BuildContent(job.data);
 
-    this.logger.info({ jobKind: job.data.kind, to: content.to }, 'Sending email');
+    this.logger.info(
+      { jobKind: job.data.kind, to: content.to },
+      'Sending email',
+    );
 
     await this.emailService.Send(content);
   }

@@ -14,10 +14,7 @@ function ParseNodeEnv(value: string | undefined): NodeEnv {
   return 'development';
 }
 
-export const appConfig = registerAs(
-  'app',
-  (): AppConfig => ({
-    nodeEnv: ParseNodeEnv(process.env.NODE_ENV),
-    port: Number(process.env.PORT ?? 3000),
-  }),
-);
+export const appConfig = registerAs('app', (): AppConfig => ({
+  nodeEnv: ParseNodeEnv(process.env.NODE_ENV),
+  port: Number(process.env.PORT ?? 3000),
+}));

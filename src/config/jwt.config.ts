@@ -7,12 +7,13 @@ export interface JwtConfig {
   refreshExpiresInSeconds: number;
 }
 
-export const jwtConfig = registerAs(
-  'jwt',
-  (): JwtConfig => ({
-    accessSecret: process.env.JWT_SECRET ?? '',
-    accessExpiresInSeconds: Number(process.env.JWT_ACCESS_EXPIRES_IN_SECONDS ?? 900),
-    refreshSecret: process.env.REFRESH_SECRET ?? '',
-    refreshExpiresInSeconds: Number(process.env.JWT_REFRESH_EXPIRES_IN_SECONDS ?? 604800),
-  }),
-);
+export const jwtConfig = registerAs('jwt', (): JwtConfig => ({
+  accessSecret: process.env.JWT_SECRET ?? '',
+  accessExpiresInSeconds: Number(
+    process.env.JWT_ACCESS_EXPIRES_IN_SECONDS ?? 900,
+  ),
+  refreshSecret: process.env.REFRESH_SECRET ?? '',
+  refreshExpiresInSeconds: Number(
+    process.env.JWT_REFRESH_EXPIRES_IN_SECONDS ?? 604800,
+  ),
+}));

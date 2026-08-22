@@ -3,7 +3,10 @@ import { PersistenceErrorMapper } from './persistence-error.mapper';
 import { DomainConflictException } from '../common/exceptions/conflict.exception';
 import { DomainNotFoundException } from '../common/exceptions/not-found.exception';
 
-function BuildDriverError(overrides: { code?: string; constraint?: string }): Error {
+function BuildDriverError(overrides: {
+  code?: string;
+  constraint?: string;
+}): Error {
   return Object.assign(new Error('driver error'), overrides);
 }
 

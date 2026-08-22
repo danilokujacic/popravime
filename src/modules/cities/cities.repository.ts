@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { City } from './entities/city.entity';
 import { ListCitiesFilter } from './cities.types';
-import { PersistenceErrorMapper } from '../../database/persistence-error.mapper';
+import {
+  IsQueryFailedError,
+  PersistenceErrorMapper,
+} from '../../database/persistence-error.mapper';
 
 @Injectable()
 export class CitiesRepository {
@@ -38,7 +41,7 @@ export class CitiesRepository {
     try {
       return await this.repository.save(city);
     } catch (error) {
-      if (error instanceof QueryFailedError) {
+      if (IsQueryFailedError(error)) {
         throw PersistenceErrorMapper.ToDomain(error);
       }
       throw error;

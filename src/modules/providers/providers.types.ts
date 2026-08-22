@@ -55,4 +55,3 @@ export interface ListProvidersFilter {
   search?: string;
   verificationStatus?: VerificationStatus;
 }
-

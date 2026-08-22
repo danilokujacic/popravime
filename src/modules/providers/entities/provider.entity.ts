@@ -79,7 +79,13 @@ export class Provider {
   @Column({ name: 'is_certified', type: 'boolean', default: false })
   isCertified: boolean;
 
-  @Column({ name: 'average_rating', type: 'decimal', precision: 3, scale: 2, nullable: true })
+  @Column({
+    name: 'average_rating',
+    type: 'decimal',
+    precision: 3,
+    scale: 2,
+    nullable: true,
+  })
   averageRating: string | null;
 
   @Column({ name: 'review_count', type: 'integer', default: 0 })

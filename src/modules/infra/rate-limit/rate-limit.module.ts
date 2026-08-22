@@ -22,7 +22,11 @@ import { throttleConfig } from '../../../config/throttle.config';
           },
         ],
         storage: new ThrottlerStorageRedisService(
-          new Redis({ host: redis.host, port: redis.port, password: redis.password }),
+          new Redis({
+            host: redis.host,
+            port: redis.port,
+            password: redis.password,
+          }),
         ),
       }),
     }),

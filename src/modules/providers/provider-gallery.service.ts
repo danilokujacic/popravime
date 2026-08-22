@@ -50,13 +50,20 @@ export class ProviderGalleryService implements IProviderGalleryService {
     return image;
   }
 
-  async Delete(providerId: string, imageId: string, ownerUserId: string): Promise<void> {
+  async Delete(
+    providerId: string,
+    imageId: string,
+    ownerUserId: string,
+  ): Promise<void> {
     const provider = await this.providersService.FindById(providerId);
     this.EnsureOwnership(provider.ownerUserId, ownerUserId);
 
     const image = await this.providerGalleryRepository.FindById(imageId);
     if (!image || image.providerId !== providerId) {
-      throw new DomainNotFoundException('GALLERY_IMAGE_NOT_FOUND', 'Gallery image not found');
+      throw new DomainNotFoundException(
+        'GALLERY_IMAGE_NOT_FOUND',
+        'Gallery image not found',
+      );
     }
 
     const key = image.imageUrl.substring(image.imageUrl.lastIndexOf('/') + 1);

@@ -1,0 +1,212 @@
+import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { OffersRepository } from './offers.repository';
+import { Offer } from './entities/offer.entity';
+import {
+  CreateOfferInput,
+  ListOffersFilter,
+  OfferStatus,
+} from './offers.types';
+import { RequestStatus } from '../repair-requests/repair-requests.types';
+import { IOffersService } from './offers.service.interface';
+import { OfferStatusTransitions } from './state/offer-status.transitions';
+import { ProvidersService } from '../providers/providers.service';
+import { RepairRequestsService } from '../repair-requests/repair-requests.service';
+import { UsersService } from '../users/users.service';
+import { EmailQueueService } from '../infra/email/email-queue.service';
+import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
+import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
+import { DomainConflictException } from '../../common/exceptions/conflict.exception';
+
+@Injectable()
+export class OffersService implements IOffersService {
+  constructor(
+    private readonly offersRepository: OffersRepository,
+    private readonly providersService: ProvidersService,
+    private readonly repairRequestsService: RepairRequestsService,
+    private readonly usersService: UsersService,
+    private readonly emailQueueService: EmailQueueService,
+    @InjectPinoLogger(OffersService.name)
+    private readonly logger: PinoLogger,
+  ) {}
+
+  async Create(
+    providerOwnerId: string,
+    input: CreateOfferInput,
+  ): Promise<Offer> {
+    const provider = await this.providersService.FindById(input.providerId);
+    this.EnsureProviderOwnership(provider.ownerUserId, providerOwnerId);
+
+    const request = await this.repairRequestsService.FindById(input.requestId);
+    this.EnsureAcceptingOffers(request.status);
+
+    const offer = await this.offersRepository.Create({
+      requestId: input.requestId,
+      providerId: input.providerId,
+      priceMin: input.priceMin,
+      priceMax: input.priceMax,
+      estimatedDuration: input.estimatedDuration,
+      partsType: input.partsType,
+      message: input.message ?? null,
+    });
+
+    await this.repairRequestsService.MarkOffersReceived(input.requestId);
+
+    const customer = await this.usersService.FindById(request.customerId);
+    await this.emailQueueService.Enqueue({
+      kind: 'offer-received',
+      payload: {
+        to: customer.email,
+        customerName: customer.fullName,
+        providerName: provider.businessName,
+        requestId: request.id,
+      },
+    });
+
+    this.logger.info(
+      {
+        offerId: offer.id,
+        requestId: input.requestId,
+        providerId: input.providerId,
+      },
+      'Offer submitted',
+    );
+
+    return offer;
+  }
+
+  async Accept(offerId: string, customerId: string): Promise<Offer> {
+    const offer = await this.FindById(offerId);
+    this.EnsureTransition(offer.status, OfferStatus.Accepted);
+
+    await this.repairRequestsService.AcceptOffer(
+      offer.requestId,
+      offer.id,
+      customerId,
+    );
+
+    offer.status = OfferStatus.Accepted;
+    const savedOffer = await this.offersRepository.Save(offer);
+
+    const otherPending = await this.offersRepository.FindOtherPending(
+      offer.requestId,
+      offer.id,
+    );
+    if (otherPending.length > 0) {
+      const rejected = otherPending.map((pending) => {
+        pending.status = OfferStatus.Rejected;
+        return pending;
+      });
+      await this.offersRepository.SaveMany(rejected);
+    }
+
+    const provider = await this.providersService.FindById(offer.providerId);
+    const providerOwner = await this.usersService.FindById(
+      provider.ownerUserId,
+    );
+    await this.emailQueueService.Enqueue({
+      kind: 'offer-accepted',
+      payload: {
+        to: providerOwner.email,
+        providerName: provider.businessName,
+        requestId: offer.requestId,
+      },
+    });
+
+    this.logger.info(
+      {
+        offerId,
+        requestId: offer.requestId,
+        customerId,
+        autoRejectedCount: otherPending.length,
+      },
+      'Offer accepted',
+    );
+
+    return savedOffer;
+  }
+
+  async Reject(offerId: string, customerId: string): Promise<Offer> {
+    const offer = await this.FindById(offerId);
+    this.EnsureTransition(offer.status, OfferStatus.Rejected);
+
+    const request = await this.repairRequestsService.FindById(offer.requestId);
+    if (request.customerId !== customerId) {
+      throw new DomainForbiddenException(
+        'OFFER_NOT_OWNED',
+        'You do not own the repair request this offer belongs to',
+      );
+    }
+
+    offer.status = OfferStatus.Rejected;
+    const saved = await this.offersRepository.Save(offer);
+
+    this.logger.info({ offerId, customerId }, 'Offer rejected');
+
+    return saved;
+  }
+
+  async Withdraw(offerId: string, providerOwnerId: string): Promise<Offer> {
+    const offer = await this.FindById(offerId);
+    this.EnsureTransition(offer.status, OfferStatus.Withdrawn);
+
+    const provider = await this.providersService.FindById(offer.providerId);
+    this.EnsureProviderOwnership(provider.ownerUserId, providerOwnerId);
+
+    offer.status = OfferStatus.Withdrawn;
+    const saved = await this.offersRepository.Save(offer);
+
+    this.logger.info({ offerId, providerOwnerId }, 'Offer withdrawn');
+
+    return saved;
+  }
+
+  async FindById(id: string): Promise<Offer> {
+    const offer = await this.offersRepository.FindById(id);
+    if (!offer) {
+      throw new DomainNotFoundException('OFFER_NOT_FOUND', 'Offer not found');
+    }
+    return offer;
+  }
+
+  List(
+    filter: ListOffersFilter,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedResult<Offer>> {
+    return this.offersRepository.List(filter, page, limit);
+  }
+
+  private EnsureAcceptingOffers(status: RequestStatus): void {
+    const acceptsOffers =
+      status === RequestStatus.Open || status === RequestStatus.OffersReceived;
+    if (!acceptsOffers) {
+      throw new DomainConflictException(
+        'REQUEST_NOT_ACCEPTING_OFFERS',
+        'This repair request is no longer accepting offers',
+      );
+    }
+  }
+
+  private EnsureProviderOwnership(
+    providerOwnerId: string,
+    requesterId: string,
+  ): void {
+    if (providerOwnerId !== requesterId) {
+      throw new DomainForbiddenException(
+        'PROVIDER_NOT_OWNED',
+        'You do not own this provider profile',
+      );
+    }
+  }
+
+  private EnsureTransition(from: OfferStatus, to: OfferStatus): void {
+    if (!OfferStatusTransitions.CanTransition(from, to)) {
+      throw new DomainConflictException(
+        'INVALID_OFFER_TRANSITION',
+        `Cannot transition offer from ${from} to ${to}`,
+      );
+    }
+  }
+}

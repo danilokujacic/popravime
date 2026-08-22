@@ -3,7 +3,9 @@ function CamelToSnake(key: string): string {
 }
 
 function IsOpaqueValue(value: object): boolean {
-  return value instanceof Date || value instanceof RegExp || Buffer.isBuffer(value);
+  return (
+    value instanceof Date || value instanceof RegExp || Buffer.isBuffer(value)
+  );
 }
 
 function IsConvertibleObject(value: unknown): value is Record<string, unknown> {
@@ -19,7 +21,8 @@ export class CaseMapper {
     if (IsConvertibleObject(value)) {
       return Object.entries(value).reduce<Record<string, unknown>>(
         (accumulator, [key, propertyValue]) => {
-          accumulator[CamelToSnake(key)] = CaseMapper.ToSnakeCase(propertyValue);
+          accumulator[CamelToSnake(key)] =
+            CaseMapper.ToSnakeCase(propertyValue);
           return accumulator;
         },
         {},

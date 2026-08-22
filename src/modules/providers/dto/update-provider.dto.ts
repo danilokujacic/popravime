@@ -1,5 +1,13 @@
 import { Expose } from 'class-transformer';
-import { IsEmail, IsObject, IsOptional, IsString, IsUrl, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import type { WorkingHours } from '../providers.types';
 
 export class UpdateProviderDto {

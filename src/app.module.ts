@@ -23,6 +23,8 @@ import { CategoriesModule } from './modules/categories/categories.module';
 import { StorageModule } from './modules/infra/storage/storage.module';
 import { EmailModule } from './modules/infra/email/email.module';
 import { ProvidersModule } from './modules/providers/providers.module';
+import { RepairRequestsModule } from './modules/repair-requests/repair-requests.module';
+import { OffersModule } from './modules/offers/offers.module';
 
 @Module({
   imports: [
@@ -34,7 +36,8 @@ import { ProvidersModule } from './modules/providers/providers.module';
     }),
     LoggerModule.forRootAsync({
       inject: [appConfig.KEY],
-      useFactory: (config: ConfigType<typeof appConfig>) => BuildPinoOptions(config.nodeEnv),
+      useFactory: (config: ConfigType<typeof appConfig>) =>
+        BuildPinoOptions(config.nodeEnv),
     }),
     DatabaseModule,
     CacheInfraModule,
@@ -48,6 +51,8 @@ import { ProvidersModule } from './modules/providers/providers.module';
     CitiesModule,
     CategoriesModule,
     ProvidersModule,
+    RepairRequestsModule,
+    OffersModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: DomainExceptionFilter },

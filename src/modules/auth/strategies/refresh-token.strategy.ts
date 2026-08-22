@@ -7,7 +7,10 @@ import { JwtPayload } from '../interfaces/jwt-payload.interface';
 import { AuthenticatedUser } from '../../../common/interfaces/authenticated-request.interface';
 
 @Injectable()
-export class RefreshTokenStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
+export class RefreshTokenStrategy extends PassportStrategy(
+  Strategy,
+  'jwt-refresh',
+) {
   constructor(
     @Inject(jwtConfig.KEY)
     config: ConfigType<typeof jwtConfig>,

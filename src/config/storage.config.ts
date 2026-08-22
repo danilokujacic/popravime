@@ -10,15 +10,12 @@ export interface StorageConfig {
   publicUrl: string;
 }
 
-export const storageConfig = registerAs(
-  'storage',
-  (): StorageConfig => ({
-    endpoint: process.env.STORAGE_ENDPOINT ?? '',
-    region: process.env.STORAGE_REGION ?? 'auto',
-    bucket: process.env.STORAGE_BUCKET ?? '',
-    accessKey: process.env.STORAGE_ACCESS_KEY ?? '',
-    secretKey: process.env.STORAGE_SECRET_KEY ?? '',
-    forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE !== 'false',
-    publicUrl: process.env.STORAGE_PUBLIC_URL ?? '',
-  }),
-);
+export const storageConfig = registerAs('storage', (): StorageConfig => ({
+  endpoint: process.env.STORAGE_ENDPOINT ?? '',
+  region: process.env.STORAGE_REGION ?? 'auto',
+  bucket: process.env.STORAGE_BUCKET ?? '',
+  accessKey: process.env.STORAGE_ACCESS_KEY ?? '',
+  secretKey: process.env.STORAGE_SECRET_KEY ?? '',
+  forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE !== 'false',
+  publicUrl: process.env.STORAGE_PUBLIC_URL ?? '',
+}));

@@ -3,7 +3,11 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { ProviderRepository } from './repositories/provider.repository';
 import { ProviderCategoryRepository } from './repositories/provider-category.repository';
 import { Provider } from './entities/provider.entity';
-import { CreateProviderInput, ListProvidersFilter, UpdateProviderInput } from './providers.types';
+import {
+  CreateProviderInput,
+  ListProvidersFilter,
+  UpdateProviderInput,
+} from './providers.types';
 import { IProvidersService } from './providers.service.interface';
 import type { IGeocodingService } from './geocoding/geocoding.service.interface';
 import { CitiesService } from '../cities/cities.service';
@@ -25,12 +29,18 @@ export class ProvidersService implements IProvidersService {
     private readonly logger: PinoLogger,
   ) {}
 
-  async Create(ownerUserId: string, input: CreateProviderInput): Promise<Provider> {
+  async Create(
+    ownerUserId: string,
+    input: CreateProviderInput,
+  ): Promise<Provider> {
     const city = await this.citiesService.FindById(input.cityId);
-    const slug = await SlugGenerator.GenerateUnique(input.businessName, (candidate) =>
-      this.providerRepository.SlugExists(candidate),
+    const slug = await SlugGenerator.GenerateUnique(
+      input.businessName,
+      (candidate) => this.providerRepository.SlugExists(candidate),
     );
-    const geocode = await this.geocodingService.Geocode(`${input.address}, ${city.name}, Montenegro`);
+    const geocode = await this.geocodingService.Geocode(
+      `${input.address}, ${city.name}, Montenegro`,
+    );
 
     const provider = await this.providerRepository.Create({
       ownerUserId,
@@ -47,7 +57,10 @@ export class ProvidersService implements IProvidersService {
       workingHours: input.workingHours ?? null,
     });
 
-    await this.providerCategoryRepository.ReplaceForProvider(provider.id, input.categoryIds);
+    await this.providerCategoryRepository.ReplaceForProvider(
+      provider.id,
+      input.categoryIds,
+    );
     await this.citiesService.IncrementProviderCount(input.cityId);
 
     this.logger.info(
@@ -58,7 +71,11 @@ export class ProvidersService implements IProvidersService {
     return provider;
   }
 
-  async Update(id: string, ownerUserId: string, input: UpdateProviderInput): Promise<Provider> {
+  async Update(
+    id: string,
+    ownerUserId: string,
+    input: UpdateProviderInput,
+  ): Promise<Provider> {
     const provider = await this.FindById(id);
     this.EnsureOwnership(provider, ownerUserId);
 
@@ -94,7 +111,10 @@ export class ProvidersService implements IProvidersService {
   async FindById(id: string): Promise<Provider> {
     const provider = await this.providerRepository.FindById(id);
     if (!provider) {
-      throw new DomainNotFoundException('PROVIDER_NOT_FOUND', 'Provider not found');
+      throw new DomainNotFoundException(
+        'PROVIDER_NOT_FOUND',
+        'Provider not found',
+      );
     }
     return provider;
   }
@@ -102,7 +122,10 @@ export class ProvidersService implements IProvidersService {
   async FindBySlug(slug: string): Promise<Provider> {
     const provider = await this.providerRepository.FindBySlug(slug);
     if (!provider) {
-      throw new DomainNotFoundException('PROVIDER_NOT_FOUND', 'Provider not found');
+      throw new DomainNotFoundException(
+        'PROVIDER_NOT_FOUND',
+        'Provider not found',
+      );
     }
     return provider;
   }
@@ -125,7 +148,10 @@ export class ProvidersService implements IProvidersService {
   }
 }
 
-function ApplyBasicFields(provider: Provider, input: UpdateProviderInput): void {
+function ApplyBasicFields(
+  provider: Provider,
+  input: UpdateProviderInput,
+): void {
   if (input.businessName !== undefined) {
     provider.businessName = input.businessName;
   }
@@ -137,7 +163,10 @@ function ApplyBasicFields(provider: Provider, input: UpdateProviderInput): void 
   }
 }
 
-function ApplyContactFields(provider: Provider, input: UpdateProviderInput): void {
+function ApplyContactFields(
+  provider: Provider,
+  input: UpdateProviderInput,
+): void {
   if (input.phone !== undefined) {
     provider.phone = input.phone;
   }
@@ -149,7 +178,10 @@ function ApplyContactFields(provider: Provider, input: UpdateProviderInput): voi
   }
 }
 
-function ApplyWorkingHours(provider: Provider, input: UpdateProviderInput): void {
+function ApplyWorkingHours(
+  provider: Provider,
+  input: UpdateProviderInput,
+): void {
   if (input.workingHours !== undefined) {
     provider.workingHours = input.workingHours;
   }

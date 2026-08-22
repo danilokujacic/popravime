@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Provider } from '../entities/provider.entity';
 import { ListProvidersFilter } from '../providers.types';
 import { PaginatedResult } from '../../../common/interfaces/paginated-result.interface';
-import { PersistenceErrorMapper } from '../../../database/persistence-error.mapper';
+import {
+  IsQueryFailedError,
+  PersistenceErrorMapper,
+} from '../../../database/persistence-error.mapper';
 
 const CATEGORY_EXISTS_CLAUSE = `(:categoryId::uuid IS NULL OR EXISTS (
   SELECT 1 FROM provider_categories pc
@@ -28,13 +31,21 @@ export class ProviderRepository {
       .where('(:cityId::uuid IS NULL OR provider.cityId = :cityId)', {
         cityId: filter.cityId ?? null,
       })
-      .andWhere(CATEGORY_EXISTS_CLAUSE, { categoryId: filter.categoryId ?? null })
-      .andWhere('(:search::text IS NULL OR provider.businessName ILIKE :search)', {
-        search: filter.search ? `%${filter.search}%` : null,
+      .andWhere(CATEGORY_EXISTS_CLAUSE, {
+        categoryId: filter.categoryId ?? null,
       })
-      .andWhere('(:verificationStatus::text IS NULL OR provider.verificationStatus = :verificationStatus)', {
-        verificationStatus: filter.verificationStatus ?? null,
-      })
+      .andWhere(
+        '(:search::text IS NULL OR provider.businessName ILIKE :search)',
+        {
+          search: filter.search ? `%${filter.search}%` : null,
+        },
+      )
+      .andWhere(
+        '(:verificationStatus::text IS NULL OR provider.verificationStatus = :verificationStatus)',
+        {
+          verificationStatus: filter.verificationStatus ?? null,
+        },
+      )
       .orderBy('provider.businessName', 'ASC')
       .skip((page - 1) * limit)
       .take(limit);
@@ -61,7 +72,7 @@ export class ProviderRepository {
       const entity = this.repository.create(provider);
       return await this.repository.save(entity);
     } catch (error) {
-      if (error instanceof QueryFailedError) {
+      if (IsQueryFailedError(error)) {
         throw PersistenceErrorMapper.ToDomain(error);
       }
       throw error;
@@ -72,7 +83,7 @@ export class ProviderRepository {
     try {
       return await this.repository.save(provider);
     } catch (error) {
-      if (error instanceof QueryFailedError) {
+      if (IsQueryFailedError(error)) {
         throw PersistenceErrorMapper.ToDomain(error);
       }
       throw error;

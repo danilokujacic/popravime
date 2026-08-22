@@ -11,7 +11,10 @@ export class ProviderGalleryRepository {
   ) {}
 
   List(providerId: string): Promise<ProviderGallery[]> {
-    return this.repository.find({ where: { providerId }, order: { sortOrder: 'ASC' } });
+    return this.repository.find({
+      where: { providerId },
+      order: { sortOrder: 'ASC' },
+    });
   }
 
   async Add(image: Partial<ProviderGallery>): Promise<ProviderGallery> {

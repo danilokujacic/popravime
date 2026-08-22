@@ -6,11 +6,8 @@ export interface RedisConfig {
   password?: string;
 }
 
-export const redisConfig = registerAs(
-  'redis',
-  (): RedisConfig => ({
-    host: process.env.REDIS_HOST ?? 'localhost',
-    port: Number(process.env.REDIS_PORT ?? 6379),
-    password: process.env.REDIS_PASSWORD || undefined,
-  }),
-);
+export const redisConfig = registerAs('redis', (): RedisConfig => ({
+  host: process.env.REDIS_HOST ?? 'localhost',
+  port: Number(process.env.REDIS_PORT ?? 6379),
+  password: process.env.REDIS_PASSWORD || undefined,
+}));

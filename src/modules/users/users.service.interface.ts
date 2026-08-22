@@ -1,5 +1,9 @@
 import { User } from './entities/user.entity';
-import { CreateUserInput, UpdateUserInput, UserCredentials } from './users.types';
+import {
+  CreateUserInput,
+  UpdateUserInput,
+  UserCredentials,
+} from './users.types';
 
 export interface IUsersService {
   Register(input: CreateUserInput): Promise<User>;

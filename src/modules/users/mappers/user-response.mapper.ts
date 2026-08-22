@@ -2,7 +2,7 @@ import { User } from '../entities/user.entity';
 import { UserResponseDto } from '../dto/user-response.dto';
 
 export class UserResponseMapper {
-  static ToDto(user: User): UserResponseDto {
+  static ToDto(this: void, user: User): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = user.id;
     dto.email = user.email;

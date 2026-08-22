@@ -1,8 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
-import { PersistenceErrorMapper } from '../../database/persistence-error.mapper';
+import {
+  IsQueryFailedError,
+  PersistenceErrorMapper,
+} from '../../database/persistence-error.mapper';
 import { UserCredentials } from './users.types';
 
 @Injectable()
@@ -31,7 +34,12 @@ export class UsersRepository {
       return null;
     }
 
-    return { id: user.id, email: user.email, passwordHash: user.passwordHash, role: user.role };
+    return {
+      id: user.id,
+      email: user.email,
+      passwordHash: user.passwordHash,
+      role: user.role,
+    };
   }
 
   async Create(user: Partial<User>): Promise<User> {
@@ -39,7 +47,7 @@ export class UsersRepository {
       const entity = this.repository.create(user);
       return await this.repository.save(entity);
     } catch (error) {
-      if (error instanceof QueryFailedError) {
+      if (IsQueryFailedError(error)) {
         throw PersistenceErrorMapper.ToDomain(error);
       }
       throw error;
@@ -50,7 +58,7 @@ export class UsersRepository {
     try {
       return await this.repository.save(user);
     } catch (error) {
-      if (error instanceof QueryFailedError) {
+      if (IsQueryFailedError(error)) {
         throw PersistenceErrorMapper.ToDomain(error);
       }
       throw error;

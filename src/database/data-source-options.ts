@@ -8,7 +8,9 @@ export interface DataSourceCredentials {
   database: string;
 }
 
-export function BuildDataSourceOptions(credentials: DataSourceCredentials): DataSourceOptions {
+export function BuildDataSourceOptions(
+  credentials: DataSourceCredentials,
+): DataSourceOptions {
   return {
     type: 'postgres',
     host: credentials.host,
@@ -17,6 +19,7 @@ export function BuildDataSourceOptions(credentials: DataSourceCredentials): Data
     password: credentials.password,
     database: credentials.database,
     synchronize: false,
+    invalidWhereValuesBehavior: { undefined: 'ignore' },
     entities: [`${__dirname}/../modules/**/entities/*.entity{.ts,.js}`],
     migrations: [`${__dirname}/migrations/*{.ts,.js}`],
   };

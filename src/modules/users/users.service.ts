@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { UsersRepository } from './users.repository';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { User } from './entities/user.entity';
-import { CreateUserInput, UpdateUserInput, UserCredentials } from './users.types';
+import {
+  CreateUserInput,
+  UpdateUserInput,
+  UserCredentials,
+} from './users.types';
 import { IUsersService } from './users.service.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 

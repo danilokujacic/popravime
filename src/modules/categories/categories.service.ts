@@ -31,7 +31,10 @@ export class CategoriesService implements ICategoriesService {
   async FindById(id: string): Promise<Category> {
     const category = await this.categoriesRepository.FindById(id);
     if (!category) {
-      throw new DomainNotFoundException('CATEGORY_NOT_FOUND', 'Category not found');
+      throw new DomainNotFoundException(
+        'CATEGORY_NOT_FOUND',
+        'Category not found',
+      );
     }
     return category;
   }
