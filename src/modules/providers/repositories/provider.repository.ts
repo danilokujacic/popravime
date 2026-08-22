@@ -1,0 +1,85 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
+import { Provider } from '../entities/provider.entity';
+import { ListProvidersFilter } from '../providers.types';
+import { PaginatedResult } from '../../../common/interfaces/paginated-result.interface';
+import { PersistenceErrorMapper } from '../../../database/persistence-error.mapper';
+
+const CATEGORY_EXISTS_CLAUSE = `(:categoryId::uuid IS NULL OR EXISTS (
+  SELECT 1 FROM provider_categories pc
+  WHERE pc.provider_id = provider.id AND pc.category_id = :categoryId
+))`;
+
+@Injectable()
+export class ProviderRepository {
+  constructor(
+    @InjectRepository(Provider)
+    private readonly repository: Repository<Provider>,
+  ) {}
+
+  async List(
+    filter: ListProvidersFilter,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedResult<Provider>> {
+    const query = this.repository
+      .createQueryBuilder('provider')
+      .where('(:cityId::uuid IS NULL OR provider.cityId = :cityId)', {
+        cityId: filter.cityId ?? null,
+      })
+      .andWhere(CATEGORY_EXISTS_CLAUSE, { categoryId: filter.categoryId ?? null })
+      .andWhere('(:search::text IS NULL OR provider.businessName ILIKE :search)', {
+        search: filter.search ? `%${filter.search}%` : null,
+      })
+      .andWhere('(:verificationStatus::text IS NULL OR provider.verificationStatus = :verificationStatus)', {
+        verificationStatus: filter.verificationStatus ?? null,
+      })
+      .orderBy('provider.businessName', 'ASC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [items, total] = await query.getManyAndCount();
+    return { items, total, page, limit };
+  }
+
+  FindById(id: string): Promise<Provider | null> {
+    return this.repository.findOne({ where: { id } });
+  }
+
+  FindBySlug(slug: string): Promise<Provider | null> {
+    return this.repository.findOne({ where: { slug } });
+  }
+
+  async SlugExists(slug: string): Promise<boolean> {
+    const count = await this.repository.count({ where: { slug } });
+    return count > 0;
+  }
+
+  async Create(provider: Partial<Provider>): Promise<Provider> {
+    try {
+      const entity = this.repository.create(provider);
+      return await this.repository.save(entity);
+    } catch (error) {
+      if (error instanceof QueryFailedError) {
+        throw PersistenceErrorMapper.ToDomain(error);
+      }
+      throw error;
+    }
+  }
+
+  async Save(provider: Provider): Promise<Provider> {
+    try {
+      return await this.repository.save(provider);
+    } catch (error) {
+      if (error instanceof QueryFailedError) {
+        throw PersistenceErrorMapper.ToDomain(error);
+      }
+      throw error;
+    }
+  }
+
+  async Delete(id: string): Promise<void> {
+    await this.repository.delete({ id });
+  }
+}

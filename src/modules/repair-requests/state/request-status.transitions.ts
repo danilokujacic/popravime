@@ -1,0 +1,16 @@
+import { RequestStatus } from '../repair-requests.types';
+
+const ALLOWED_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
+  [RequestStatus.Open]: [RequestStatus.OffersReceived, RequestStatus.Cancelled],
+  [RequestStatus.OffersReceived]: [RequestStatus.Accepted, RequestStatus.Cancelled],
+  [RequestStatus.Accepted]: [RequestStatus.InProgress, RequestStatus.Cancelled],
+  [RequestStatus.InProgress]: [RequestStatus.Completed, RequestStatus.Cancelled],
+  [RequestStatus.Completed]: [],
+  [RequestStatus.Cancelled]: [],
+};
+
+export class RequestStatusTransitions {
+  static CanTransition(from: RequestStatus, to: RequestStatus): boolean {
+    return ALLOWED_TRANSITIONS[from].includes(to);
+  }
+}
