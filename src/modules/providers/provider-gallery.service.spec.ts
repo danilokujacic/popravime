@@ -62,16 +62,4 @@ describe('ProviderGalleryService.Delete', () => {
       'the-real-stored-key.png',
     );
   });
-
-  it('falls back to deriving the key from the URL for legacy rows with no stored key', async () => {
-    const image = BuildImage({
-      storageKey: null,
-      imageUrl: 'http://localhost:9000/popravime-dev/legacy-key.png',
-    });
-    const { service, storageService } = BuildService(image);
-
-    await service.Delete('provider-1', 'image-1', 'owner-1');
-
-    expect(storageService.Delete).toHaveBeenCalledWith('legacy-key.png');
-  });
 });

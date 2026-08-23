@@ -1,5 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsOptional, IsString, Matches, ValidateNested } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  Matches,
+  Validate,
+  ValidateNested,
+} from 'class-validator';
+import { CloseAfterOpenConstraint } from './close-after-open.validator';
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -10,6 +17,7 @@ export class WorkingHoursRangeDto {
 
   @IsString()
   @Matches(TIME_PATTERN)
+  @Validate(CloseAfterOpenConstraint)
   close: string;
 }
 

@@ -1,0 +1,88 @@
+import { NotificationsService } from './notifications.service';
+import { NotificationsRepository } from './notifications.repository';
+import { EmailQueueService } from '../infra/email/email-queue.service';
+import { Notification } from './entities/notification.entity';
+import { NotificationType, NotifyInput } from './notifications.types';
+
+function BuildInput(overrides?: Partial<NotifyInput>): NotifyInput {
+  return {
+    userId: 'user-1',
+    type: NotificationType.NewOffer,
+    title: 'New offer received',
+    body: 'Someone sent an offer',
+    email: {
+      kind: 'welcome',
+      payload: { to: 'user@popravime.me', fullName: 'Test User' },
+    },
+    ...overrides,
+  };
+}
+
+function BuildNotification(input: NotifyInput): Notification {
+  return {
+    id: 'notification-1',
+    userId: input.userId,
+    type: input.type,
+    title: input.title,
+    body: input.body,
+    relatedEntityType: input.relatedEntityType ?? null,
+    relatedEntityId: input.relatedEntityId ?? null,
+    isRead: false,
+  } as Notification;
+}
+
+describe('NotificationsService.Notify (outside a transactional context)', () => {
+  function BuildService(notification: Notification | Error) {
+    const notificationsRepository = {
+      Create:
+        notification instanceof Error
+          ? jest.fn().mockRejectedValue(notification)
+          : jest.fn().mockResolvedValue(notification),
+    } as unknown as NotificationsRepository;
+
+    const emailQueueService = {
+      Enqueue: jest.fn().mockResolvedValue(undefined),
+    } as unknown as EmailQueueService;
+
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof NotificationsService>[2];
+
+    const service = new NotificationsService(
+      notificationsRepository,
+      emailQueueService,
+      logger,
+    );
+
+    return { service, notificationsRepository, emailQueueService, logger };
+  }
+
+  it('persists the notification and enqueues the email immediately as a fallback', async () => {
+    const input = BuildInput();
+    const notification = BuildNotification(input);
+    const { service, notificationsRepository, emailQueueService, logger } =
+      BuildService(notification);
+
+    const result = await service.Notify(input);
+
+    expect(result.id).toBe('notification-1');
+    expect(notificationsRepository.Create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', type: input.type }),
+    );
+    expect(emailQueueService.Enqueue).toHaveBeenCalledWith(input.email);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ emailKind: 'welcome' }),
+      expect.any(String),
+    );
+  });
+
+  it('never enqueues the email when persisting the notification fails', async () => {
+    const failure = new Error('insert failed');
+    const { service, emailQueueService } = BuildService(failure);
+
+    await expect(service.Notify(BuildInput())).rejects.toThrow(failure);
+
+    expect(emailQueueService.Enqueue).not.toHaveBeenCalled();
+  });
+});

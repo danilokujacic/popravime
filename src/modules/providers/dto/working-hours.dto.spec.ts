@@ -45,4 +45,20 @@ describe('WorkingHoursDto', () => {
 
     expect(errorCount).toBeGreaterThan(0);
   });
+
+  it('rejects a close time that is not after open', async () => {
+    const errorCount = await ValidateWorkingHours({
+      monday: { open: '18:00', close: '09:00' },
+    });
+
+    expect(errorCount).toBeGreaterThan(0);
+  });
+
+  it('rejects an equal open and close time', async () => {
+    const errorCount = await ValidateWorkingHours({
+      monday: { open: '09:00', close: '09:00' },
+    });
+
+    expect(errorCount).toBeGreaterThan(0);
+  });
 });

@@ -67,17 +67,10 @@ export class ProviderGalleryService implements IProviderGalleryService {
       );
     }
 
-    await this.storageService.Delete(this.ResolveStorageKey(image));
+    await this.storageService.Delete(image.storageKey);
     await this.providerGalleryRepository.Delete(imageId);
 
     this.logger.info({ providerId, imageId }, 'Gallery image deleted');
-  }
-
-  private ResolveStorageKey(image: ProviderGallery): string {
-    if (image.storageKey) {
-      return image.storageKey;
-    }
-    return image.imageUrl.substring(image.imageUrl.lastIndexOf('/') + 1);
   }
 
   private EnsureOwnership(providerOwnerId: string, ownerUserId: string): void {

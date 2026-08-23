@@ -13,7 +13,10 @@ section below for the full write-up.
 Phases 4–6 are also done — these are **not new product scope**, they close out the concrete
 backlog Phase 1/2/3 already disclosed above (transactional integrity, ownership/validation
 hardening, audit-trail completeness, and a re-attempt at Docker Compose). See the "Phase 4 + 5 +
-6" section below.
+6" section below. A small follow-up "Closeout pass" after that resolved the last three items
+Phase 4–6 itself disclosed as still-open (see that section, near the end) — at that point the
+only genuinely outstanding item left in this whole log is the Docker/`test:integration` one,
+which is blocked by the sandbox environment, not by any remaining code work.
 
 ## What's done, all verified working live against a real Postgres + Redis
 
@@ -415,26 +418,55 @@ migrations were re-run cleanly and the app was rebooted and re-verified from scr
   `GET /faq-items`/`GET /price-estimates` routes still reflect the changes correctly (cache
   invalidation unaffected by the audit-log addition).
 
-### Known Phase 4–6 simplifications (disclosed, not hidden)
+### Known Phase 4–6 simplifications (disclosed, not hidden) — all three closed in the follow-up
+pass below
 
-- **`NotificationsService`'s no-transactional-context fallback path is untested by a dedicated
-  unit test.** `EnqueueEmailOnCommit`'s `catch` branch (immediate enqueue + a warning log, for
-  the hypothetical case where `Notify` is ever called from outside a `@Transactional()` method)
-  is currently only exercised implicitly — every actual call site today *is* transactional, so
-  this path never fires in practice. Cheap to add a direct test later if a new, non-transactional
-  caller of `Notify` is ever introduced.
-- **`WorkingHoursDto` validates shape and time format, not logical ordering** — nothing rejects
-  `{ open: "18:00", close: "09:00" }` (close before open). Out of scope for what Phase 1's
-  disclosure actually asked for ("not per-weekday-shape" — now fixed), but a legitimate further
-  tightening if this ever needs to be bulletproof against nonsensical (not just malformed) input.
-- **`provider_gallery.storage_key` is nullable**, not backfilled for rows created before this
-  migration — the service falls back to the old URL-derivation logic only when `storage_key` is
-  null, so old rows keep working exactly as before, new rows get the real fix.
+- ~~`NotificationsService`'s no-transactional-context fallback path is untested by a dedicated
+  unit test.~~ Closed — see "Closeout pass" below.
+- ~~`WorkingHoursDto` validates shape and time format, not logical ordering.~~ Closed — see
+  "Closeout pass" below.
+- ~~`provider_gallery.storage_key` is nullable, not backfilled for rows created before this
+  migration.~~ Closed — see "Closeout pass" below.
 
-## Nothing has been committed to git yet
-The repo already had one base commit (`accd99d init` — the bare `nest new` scaffold) before
-this work started. Everything since is uncommitted: as of the end of Phase 4/5/6, `git status
---short` shows 34 modified tracked files and 11 new untracked paths (whole new module
-directories for every Phase 1/2/3 module, `test/integration/`, migrations, the Phase 4–6
-additions like `src/__mocks__/`, `src/jest-setup.ts`, `test/jest-setup.ts`, etc.). No commits
-made this session — waiting for review.
+## Closeout pass (post Phase 4–6)
+
+Asked what "phases 7/8/9" should cover; by this point PROGRESS.md's disclosed backlog was down
+to the three items above plus the still-environment-blocked Docker item — not three phases'
+worth of work. Closed the three real ones out in one small pass rather than inventing new scope:
+
+1. **`NotificationsService.Notify` unit test added** (`notifications.service.spec.ts`, new file
+   — this service had no unit test before). Because the Jest environment has no active
+   `@Transactional()` context (the manual mock's `Transactional()` is a no-op and
+   `runOnTransactionCommit` always throws), any unit test of `Notify` inherently exercises
+   exactly the fallback path this item was about — asserts the email still enqueues, a warning
+   is logged, and a persistence failure prevents any enqueue at all.
+2. **`WorkingHoursDto` now validates `close > open`**, not just shape/format. New
+   `CloseAfterOpenConstraint` (`dto/close-after-open.validator.ts`, its own file per the
+   calculators/validators convention) — a class-validator custom constraint comparing the two
+   `HH:MM` strings lexicographically (safe for zero-padded 24h time). Two new test cases added.
+3. **`provider_gallery.storage_key` backfilled and made `NOT NULL`.** New migration
+   (`1787395703241-backfill-provider-gallery-storage-key.ts`) runs
+   `regexp_replace(image_url, '^.*/', '')` for any existing null rows (the exact same derivation
+   logic the runtime fallback used), then sets the column `NOT NULL`. The entity's `storageKey`
+   is now `string`, not `string | null`, and `ProviderGalleryService.Delete`'s now-dead fallback
+   branch was removed — `image.storageKey` is used directly. This is the more complete fix the
+   original disclosure flagged as deferred ("not backfilled").
+
+Full unit suite: **73/73 passing** (18 suites), `tsc --noEmit` clean, `pnpm run lint` clean.
+
+Live-verified against the same scratch Postgres/Redis/MinIO (still running from Phase 4–6):
+inserted a synthetic pre-migration row with `storage_key = NULL` directly via SQL, ran the new
+migration, confirmed the backfill correctly derived `legacy-uuid-legacy-photo.png` from its URL
+and the column became `NOT NULL`. Then over real HTTP: `working_hours` with `close` before
+`open` → 400 with `"close must be later than open"`; equal `open`/`close` → 400 (same message,
+confirms strict `<` not `<=`); valid ordering → 200. Uploaded a fresh gallery image (real MinIO
+upload, `storage_key` populated correctly against the new `NOT NULL` column), deleted it via the
+API, confirmed via `mc ls` the object was actually gone from the bucket, not just the DB row.
+
+## Git status
+Phases 1 through 6 are committed: `accd99d init` (bare `nest new` scaffold) → `b71afc1 phase 1`
+→ `c4b4e75 phase 2 and 3` → `78cdd26 phases 4,5,6`. The last of those was committed by the user
+directly, not by this session. Only the Closeout pass above (the three items closing out the
+last of the disclosed backlog) is uncommitted as of now — `git status --short` shows 6 modified
+tracked files and 3 new untracked paths (the new migration, `notifications.service.spec.ts`,
+`close-after-open.validator.ts`). Waiting for review before committing.
