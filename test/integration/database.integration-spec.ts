@@ -17,6 +17,10 @@ import {
   Urgency,
 } from '../../src/modules/repair-requests/repair-requests.types';
 import { OfferStatus, PartsType } from '../../src/modules/offers/offers.types';
+import { Review } from '../../src/modules/reviews/entities/review.entity';
+import { DirectInquiry } from '../../src/modules/direct-inquiries/entities/direct-inquiry.entity';
+import { Message } from '../../src/modules/messages/entities/message.entity';
+import { InquiryStatus } from '../../src/modules/direct-inquiries/direct-inquiries.types';
 
 jest.setTimeout(180000);
 
@@ -50,7 +54,7 @@ describe('Database integration', () => {
     const executed = await dataSource.query<{ name: string }[]>(
       'SELECT name FROM migrations',
     );
-    expect(executed.length).toBeGreaterThanOrEqual(9);
+    expect(executed.length).toBeGreaterThanOrEqual(19);
   });
 
   it('round-trips a full repair-request lifecycle, including the circular accepted_offer_id FK', async () => {
@@ -135,5 +139,138 @@ describe('Database integration', () => {
     const reloadedOffer = await offerRepo.findOne({ where: { id: offer.id } });
     expect(reloadedOffer?.requestId).toBe(request.id);
     expect(reloadedOffer?.providerId).toBe(provider.id);
+  });
+
+  it('enforces the Phase 2 review, message, and inquiry constraints', async () => {
+    const cityRepo = dataSource.getRepository(City);
+    const categoryRepo = dataSource.getRepository(Category);
+    const userRepo = dataSource.getRepository(User);
+    const providerRepo = dataSource.getRepository(Provider);
+    const requestRepo = dataSource.getRepository(RepairRequest);
+    const reviewRepo = dataSource.getRepository(Review);
+    const inquiryRepo = dataSource.getRepository(DirectInquiry);
+    const messageRepo = dataSource.getRepository(Message);
+
+    const city = await cityRepo.save(
+      cityRepo.create({
+        name: 'Niksic',
+        slug: 'niksic-it2',
+        region: 'Central',
+      }),
+    );
+    const category = await categoryRepo.save(
+      categoryRepo.create({ name: 'Laptops', slug: 'laptops-it2' }),
+    );
+    const customer = await userRepo.save(
+      userRepo.create({
+        email: 'customer-it2@popravime.me',
+        passwordHash: 'hash',
+        fullName: 'Customer Two',
+        role: UserRole.Customer,
+      }),
+    );
+    const owner = await userRepo.save(
+      userRepo.create({
+        email: 'owner-it2@popravime.me',
+        passwordHash: 'hash',
+        fullName: 'Owner Two',
+        role: UserRole.ProviderOwner,
+      }),
+    );
+    const provider = await providerRepo.save(
+      providerRepo.create({
+        ownerUserId: owner.id,
+        businessName: 'Test Repair Two',
+        slug: 'test-repair-it2',
+        address: 'Address 2',
+        cityId: city.id,
+        verificationStatus: VerificationStatus.Pending,
+      }),
+    );
+    const request = await requestRepo.save(
+      requestRepo.create({
+        customerId: customer.id,
+        categoryId: category.id,
+        description: 'Keyboard broken',
+        photoUrls: [],
+        cityId: city.id,
+        urgency: Urgency.Standard,
+        status: RequestStatus.Completed,
+      }),
+    );
+
+    const review = await reviewRepo.save(
+      reviewRepo.create({
+        requestId: request.id,
+        customerId: customer.id,
+        providerId: provider.id,
+        rating: 5,
+        comment: 'Fast and reliable',
+      }),
+    );
+    expect(review.id).toBeDefined();
+
+    await expect(
+      reviewRepo.save(
+        reviewRepo.create({
+          requestId: request.id,
+          customerId: customer.id,
+          providerId: provider.id,
+          rating: 4,
+          comment: 'Second review for the same request',
+        }),
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      dataSource.query(
+        `INSERT INTO "reviews" ("customer_id", "provider_id", "rating", "comment")
+         VALUES ($1, $2, $3, $4)`,
+        [customer.id, provider.id, 6, 'Out of range rating'],
+      ),
+    ).rejects.toThrow();
+
+    const inquiry = await inquiryRepo.save(
+      inquiryRepo.create({
+        providerId: provider.id,
+        customerId: customer.id,
+        message: 'Do you repair laptops?',
+        status: InquiryStatus.New,
+      }),
+    );
+    expect(inquiry.id).toBeDefined();
+
+    const requestMessage = await messageRepo.save(
+      messageRepo.create({
+        requestId: request.id,
+        senderId: customer.id,
+        body: 'When can you look at it?',
+      }),
+    );
+    expect(requestMessage.id).toBeDefined();
+
+    const inquiryMessage = await messageRepo.save(
+      messageRepo.create({
+        inquiryId: inquiry.id,
+        senderId: owner.id,
+        body: 'Yes, we do laptop repairs',
+      }),
+    );
+    expect(inquiryMessage.id).toBeDefined();
+
+    await expect(
+      dataSource.query(
+        `INSERT INTO "messages" ("request_id", "inquiry_id", "sender_id", "body")
+         VALUES ($1, $2, $3, $4)`,
+        [request.id, inquiry.id, customer.id, 'both set, should fail'],
+      ),
+    ).rejects.toThrow();
+
+    await expect(
+      dataSource.query(
+        `INSERT INTO "messages" ("sender_id", "body") VALUES ($1, $2)`,
+        [customer.id, 'neither set, should fail'],
+      ),
+    ).rejects.toThrow();
   });
 });

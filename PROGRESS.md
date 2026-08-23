@@ -5,8 +5,10 @@ Coding standards: `.claude/skills/coding-standards/SKILL.md`.
 
 ## Status
 
-Phase 1 feature-complete (build-order steps 1–17 and 19 done). Step 18 (Docker Compose) is
-written but unverified — no Docker in this sandbox.
+Phase 1, 2, and 3 are all feature-complete. Phase 1 build-order steps 1–17 and 19 done (step 18,
+Docker Compose, is written but unverified — no Docker in this sandbox). Phase 2/3 build-order
+steps 20–39 done per `.claude/plans/compressed-twirling-hummingbird.md` — see the "Phase 2 + 3"
+section below for the full write-up.
 
 ## What's done, all verified working live against a real Postgres + Redis
 
@@ -163,10 +165,146 @@ None of this scratch infrastructure is part of the repo. In a normal environment
   garbage in that field would still fail insertion cleanly (or just store oddly), not corrupt
   anything, but it's not deeply validated.
 
+## Phase 2 + 3
+
+Full plan: `.claude/plans/compressed-twirling-hummingbird.md` (Phase 2/3 scope, decisions locked
+in with the user, and build order steps 20–39).
+
+### What's done
+
+18. **Notifications module** — `NotificationsService.Notify(...)` persists a `notifications` row
+    then enqueues the matching email; it's the *only* thing besides `EmailModule` itself allowed
+    to touch `EmailQueueService`. `OffersService` and `RepairRequestsService` were refactored
+    onto it (their direct `EmailQueueService` calls removed). `EmailJob` union grew 6 variants
+    (`status-change`, `review-created`, `verification-approved`, `verification-rejected`,
+    `new-message`, `new-inquiry`) with an exhaustive (no-`default`) switch in `email.processor.ts`.
+19. **Reviews module** — `ProviderRatingCalculator` (pure, unit-tested empty/single/rounding
+    cases) + `ReviewsService.Create` synchronously recomputes and persists
+    `providers.average_rating`/`review_count` on every new review, notifies the provider owner.
+    DB-level guarantees: `CHECK (rating BETWEEN 1 AND 5)`, partial unique index on
+    `(request_id) WHERE request_id IS NOT NULL` (one review per request).
+20. **Direct inquiries module** — public submission via a new `@OptionalUser()` decorator
+    (captures `customerId` when a valid token is present, otherwise relies on
+    name/email/phone), provider-owner inbox.
+21. **Messages module** — two nullable FKs (`request_id`, `inquiry_id`) + a DB `CHECK` requiring
+    exactly one, instead of the source spec's untyped polymorphic pair — a deliberate,
+    user-approved deviation that keeps real referential integrity. REST only, no WebSocket.
+22. **Verification requests module** — `VerificationStatusTransitions` state machine
+    (unit-tested), document upload via the existing S3 storage service, one-pending-per-provider
+    limit (409 on a second submission), admin approve/reject drives
+    `ProvidersService.UpdateVerificationStatus` and writes an `AuditLogsService.Log(...)` entry.
+23. **Blog posts / FAQ items / price estimates** — admin-authored CMS content, public read
+    endpoints (FAQ + price estimates cached via the existing `CacheService`), blog posts filtered
+    to `published_at <= now()` for the public list/detail routes.
+24. **Contact messages** — public submit, admin queue + status transitions.
+25. **Audit logs** — write-only `AuditLogsService.Log`, wired into verification-request
+    approve/reject as its first (and currently only) real caller, per the approved plan.
+26. **Admin analytics** — `AdminAnalyticsService` composes four small new read methods added to
+    already-existing services (`ProvidersService.CountByVerificationStatus`,
+    `RepairRequestsService.CountByStatus`, `ReviewsService.OverallStats`,
+    `CitiesService.TopByProviderCount`) — never reaches into another module's repository
+    directly. Exposed as `GET /admin/analytics`, admin-only.
+27. **Admin bootstrap** — `ADMIN_EMAIL`/`ADMIN_PASSWORD` required env vars, `SeedAdmin` in
+    `seed-runner.ts`, `ON CONFLICT (email) DO NOTHING` (confirmed idempotent by re-running
+    `pnpm run seed:run` live — admin count stayed at the same row).
+28. **10 new migrations** (`1787395703061`–`1787395703151`) — notifications, reviews,
+    direct_inquiries, messages, verification_requests, blog_posts, faq_items, price_estimates,
+    contact_messages, audit_logs. Ran cleanly against a real Postgres instance this session.
+
+Full unit suite: **60/60 passing** (13 suites), `tsc --noEmit` clean, `pnpm run lint` clean (0
+errors) across the whole repo including the new modules.
+
+### Real bugs caught by live-testing or code review (not just `tsc`)
+
+1. **`blog-posts.repository.ts`**: `where: { publishedAt: Not(IsNull()) && LessThanOrEqual(new
+   Date()) }` — `&&` between two TypeORM `FindOperator` objects doesn't AND the resulting SQL, it
+   just evaluates to the second operand (plain JS truthy short-circuit), so the `Not(IsNull())`
+   half was silently discarded. Fixed by dropping it — `LessThanOrEqual` alone already excludes
+   NULL rows in SQL. Caught during code review, confirmed live: the public blog list/detail
+   endpoints correctly returned the one published post and nothing else.
+2. **`faq-items.controller.ts`**: a class-level `@UseGuards(RolesGuard) @Roles(Admin)` combined
+   with a `@Public()` route in the same controller — `@Public()` only bypasses the *global*
+   `JwtAuthGuard`, not a controller-level `RolesGuard`, so an unauthenticated `GET /faq-items`
+   would have hit `RolesGuard` trying to read `request.user.role` on an undefined user and
+   crashed. Fixed by moving the guards to per-method application on only the mutating routes.
+   Live-verified this session: an unauthenticated `GET /faq-items` correctly returns `200 []`
+   instead of crashing.
+3. **`this.repository.exist` doesn't exist on this TypeORM version** (renamed to `exists`) —
+   caught by `tsc` in `reviews.repository.ts`, fixed before it ever reached a live test.
+
+### Live verification performed this session
+
+No Docker in this sandbox (same constraint as Phase 1), so the same scratch-infrastructure
+approach was reused — the Postgres/Redis/MinIO instances stood up during Phase 1 verification
+were still running and were reused directly:
+
+- Ran all 10 new migrations against the live scratch Postgres — clean, no errors.
+- Wrote and ran a standalone script directly exercising the two new SQL-level integrity
+  constraints the extended `test/integration/database.integration-spec.ts` also asserts (that
+  spec still needs real Docker/testcontainers to execute — this was a substitute, not a
+  replacement): the reviews partial-unique-index (second review for the same request rejected),
+  the reviews rating `CHECK` (rating `6` rejected), and both directions of the messages
+  exactly-one-of `CHECK` (both `request_id`/`inquiry_id` set → rejected; neither set →
+  rejected). All 8 assertions passed against real Postgres.
+- Confirmed `pnpm run seed:run` is idempotent: re-ran it against a DB that already had an admin
+  user — no duplicate row, `ON CONFLICT (email) DO NOTHING` behaved as intended.
+- Booted the full app (`ts-node -r dotenv/config -r tsconfig-paths/register src/main.ts`) against
+  the scratch Postgres/Redis/MinIO — every Phase 2/3 route mapped cleanly on startup, including
+  `/admin/analytics`, `/verification-requests/:id/approve`, `/blog-posts/:slug`.
+- Full HTTP vertical slice: admin login → `GET /admin/analytics` (correct aggregated counts,
+  correct snake_case envelope) → create + publish a blog post → confirm it appears on the public
+  list and by-slug routes → create an FAQ item → confirm the public list serves it and stays
+  correct across a second (cached) read → create a price estimate → confirm it's publicly
+  readable → submit a contact message as an anonymous caller → confirm it shows up in the
+  admin queue.
+- Full provider-certification vertical slice: registered a fresh provider owner → created a
+  provider → submitted a verification request with a real multipart file upload (landed in the
+  live MinIO bucket, `document_url` came back correctly) → approved it as admin → confirmed
+  `providers.verification_status` flipped to `verified` and `is_certified` to `true` → confirmed
+  an `audit_logs` row was written (`verification_request.approved`, correct `actor_id`,
+  `metadata: {reviewNotes: ...}`) → confirmed a `notifications` row was created for the provider
+  owner and is visible via `GET /notifications` → marked it read via `PATCH
+  /notifications/:id/read` and confirmed `is_read: true` came back.
+- Checked the app log across this whole session for anything unexpected: only the two 400s from
+  deliberately-malformed test payloads showed up, and `Authorization` headers were correctly
+  redacted (`"authorization":"[REDACTED]"`) — no leaked secrets, no silent errors.
+- `test/integration/database.integration-spec.ts` itself was extended to cover the 10 new tables
+  (all new FKs, both new `CHECK` constraints, the partial unique index) but — like the Phase 1
+  integration specs — could not be executed in this sandbox; it's written, `tsc`-clean, and
+  lint-clean, mirroring exactly what the standalone script above already proved works against
+  real Postgres.
+
+### Known Phase 2/3 simplifications (disclosed, not hidden)
+
+- **`NotificationsService.Notify` isn't wrapped in the same transaction as the mutation that
+  triggers it** (e.g. `ReviewsService.Create` persists the review, recomputes rating stats, then
+  calls `Notify` as a separate step). If the notification write fails after the review/rating
+  update already committed, the user won't see an in-app notification (and, per the locked-in
+  decision, no email either) even though the underlying action succeeded. Same non-atomic
+  trade-off already disclosed for `OffersService.Accept` in Phase 1.
+- **The one-pending-verification-request-per-provider limit is enforced in the service layer**
+  (`VerificationRequestsService.Submit` checks for an existing `pending` row before inserting),
+  not with a DB constraint — a rare race (two concurrent submissions) could still slip both
+  through. Matches the precedent set by other business-rule checks in this codebase (e.g. the
+  "one review per completed request" check partially backed by a DB unique index, but the
+  "request must be `Completed`" check is service-layer only).
+- **Blog post publishing is a read-time filter, not a scheduled job** — `published_at` can be set
+  in the future, and the row simply won't appear in public queries until `now() >=
+  published_at`, with no cron/worker to do anything at the transition. This is normal, sufficient
+  behavior for a `LessThanOrEqual(now())` filter and was a deliberate no-scope-creep call, not an
+  oversight.
+- **`audit_logs` is currently only written from one call site** (verification-request
+  approve/reject), per the approved plan's explicit "wire `Log` calls into
+  `VerificationRequestsService`'s approve/reject as the first real caller" — it is not yet a
+  blanket admin-action audit trail. Extending it to other admin mutations (e.g. contact-message
+  status changes, FAQ/price-estimate edits) would be a small, additive follow-up.
+- **Contact message submission has no bespoke rate limiting beyond the global default
+  throttle** — a public, unauthenticated endpoint, so it inherits whatever `THROTTLE_DEFAULT_*`
+  is configured to but has no dedicated stricter limit the way `/auth/login` does.
+
 ## Nothing has been committed to git yet
 The repo already had one base commit (`accd99d init` — the bare `nest new` scaffold) before
-this work started. Everything since is uncommitted: `git status --short` shows 74 modified
-tracked files, 17 new untracked paths (whole new module directories like `offers/`,
-`repair-requests/`, `test/integration/`), and 2 deletions (the stale scaffold
-`test/app.e2e-spec.ts` and the dead `refresh-token.dto.ts`). No commits made this session —
-waiting for review.
+this work started. Everything since is uncommitted: as of the end of Phase 2/3, `git status
+--short` shows 25 modified tracked files and 30 new untracked paths (whole new module
+directories for every Phase 1/2/3 module, `test/integration/`, migrations, etc.). No commits
+made this session — waiting for review.

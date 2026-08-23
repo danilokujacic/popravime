@@ -6,4 +6,5 @@ export interface ICitiesService {
   FindById(id: string): Promise<City>;
   IncrementProviderCount(cityId: string): Promise<void>;
   DecrementProviderCount(cityId: string): Promise<void>;
+  TopByProviderCount(limit: number): Promise<City[]>;
 }

@@ -28,4 +28,5 @@ export interface IRepairRequestsService {
     offerId: string,
     customerId: string,
   ): Promise<RepairRequest>;
+  CountByStatus(): Promise<Record<RequestStatus, number>>;
 }

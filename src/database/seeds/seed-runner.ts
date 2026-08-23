@@ -2,12 +2,14 @@ import 'reflect-metadata';
 import { AppDataSource } from '../data-source';
 import { SeedCities } from './cities.seed';
 import { SeedCategories } from './categories.seed';
+import { SeedAdmin } from './admin.seed';
 
 async function RunSeeds(): Promise<void> {
   await AppDataSource.initialize();
 
   await SeedCities(AppDataSource);
   await SeedCategories(AppDataSource);
+  await SeedAdmin(AppDataSource);
 
   await AppDataSource.destroy();
 }

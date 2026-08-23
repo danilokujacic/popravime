@@ -3,6 +3,9 @@ import {
   CreateProviderInput,
   ListProvidersFilter,
   UpdateProviderInput,
+  UpdateRatingStatsInput,
+  UpdateVerificationStatusInput,
+  VerificationStatus,
 } from './providers.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 
@@ -21,4 +24,13 @@ export interface IProvidersService {
     page: number,
     limit: number,
   ): Promise<PaginatedResult<Provider>>;
+  UpdateRatingStats(
+    providerId: string,
+    stats: UpdateRatingStatsInput,
+  ): Promise<Provider>;
+  UpdateVerificationStatus(
+    providerId: string,
+    input: UpdateVerificationStatusInput,
+  ): Promise<Provider>;
+  CountByVerificationStatus(): Promise<Record<VerificationStatus, number>>;
 }

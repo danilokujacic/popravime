@@ -7,6 +7,9 @@ import {
   CreateProviderInput,
   ListProvidersFilter,
   UpdateProviderInput,
+  UpdateRatingStatsInput,
+  UpdateVerificationStatusInput,
+  VerificationStatus,
 } from './providers.types';
 import { IProvidersService } from './providers.service.interface';
 import type { IGeocodingService } from './geocoding/geocoding.service.interface';
@@ -136,6 +139,41 @@ export class ProvidersService implements IProvidersService {
     limit: number,
   ): Promise<PaginatedResult<Provider>> {
     return this.providerRepository.List(filter, page, limit);
+  }
+
+  CountByVerificationStatus(): Promise<Record<VerificationStatus, number>> {
+    return this.providerRepository.CountByVerificationStatus();
+  }
+
+  async UpdateRatingStats(
+    providerId: string,
+    stats: UpdateRatingStatsInput,
+  ): Promise<Provider> {
+    const provider = await this.FindById(providerId);
+    provider.averageRating = stats.averageRating;
+    provider.reviewCount = stats.reviewCount;
+
+    const saved = await this.providerRepository.Save(provider);
+    this.logger.info({ providerId, ...stats }, 'Provider rating stats updated');
+
+    return saved;
+  }
+
+  async UpdateVerificationStatus(
+    providerId: string,
+    input: UpdateVerificationStatusInput,
+  ): Promise<Provider> {
+    const provider = await this.FindById(providerId);
+    provider.verificationStatus = input.verificationStatus;
+    provider.isCertified = input.isCertified;
+
+    const saved = await this.providerRepository.Save(provider);
+    this.logger.info(
+      { providerId, ...input },
+      'Provider verification status updated',
+    );
+
+    return saved;
   }
 
   private EnsureOwnership(provider: Provider, ownerUserId: string): void {

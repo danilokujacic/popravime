@@ -43,4 +43,8 @@ export class CitiesService implements ICitiesService {
   DecrementProviderCount(cityId: string): Promise<void> {
     return this.citiesRepository.DecrementProviderCount(cityId);
   }
+
+  TopByProviderCount(limit: number): Promise<City[]> {
+    return this.citiesRepository.TopByProviderCount(limit);
+  }
 }

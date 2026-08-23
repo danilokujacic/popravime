@@ -11,6 +11,12 @@ import {
 import { BuildWelcomeEmail } from './templates/welcome.template';
 import { BuildOfferReceivedEmail } from './templates/offer-received.template';
 import { BuildOfferAcceptedEmail } from './templates/offer-accepted.template';
+import { BuildStatusChangeEmail } from './templates/status-change.template';
+import { BuildReviewCreatedEmail } from './templates/review-created.template';
+import { BuildVerificationApprovedEmail } from './templates/verification-approved.template';
+import { BuildVerificationRejectedEmail } from './templates/verification-rejected.template';
+import { BuildNewMessageEmail } from './templates/new-message.template';
+import { BuildNewInquiryEmail } from './templates/new-inquiry.template';
 
 interface EmailContent {
   to: string;
@@ -26,6 +32,24 @@ function BuildContent(job: EmailJob): EmailContent {
       return { to: job.payload.to, ...BuildOfferReceivedEmail(job.payload) };
     case 'offer-accepted':
       return { to: job.payload.to, ...BuildOfferAcceptedEmail(job.payload) };
+    case 'status-change':
+      return { to: job.payload.to, ...BuildStatusChangeEmail(job.payload) };
+    case 'review-created':
+      return { to: job.payload.to, ...BuildReviewCreatedEmail(job.payload) };
+    case 'verification-approved':
+      return {
+        to: job.payload.to,
+        ...BuildVerificationApprovedEmail(job.payload),
+      };
+    case 'verification-rejected':
+      return {
+        to: job.payload.to,
+        ...BuildVerificationRejectedEmail(job.payload),
+      };
+    case 'new-message':
+      return { to: job.payload.to, ...BuildNewMessageEmail(job.payload) };
+    case 'new-inquiry':
+      return { to: job.payload.to, ...BuildNewInquiryEmail(job.payload) };
   }
 }
 

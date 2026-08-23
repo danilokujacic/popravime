@@ -55,3 +55,13 @@ export interface ListProvidersFilter {
   search?: string;
   verificationStatus?: VerificationStatus;
 }
+
+export interface UpdateRatingStatsInput {
+  averageRating: string | null;
+  reviewCount: number;
+}
+
+export interface UpdateVerificationStatusInput {
+  verificationStatus: VerificationStatus;
+  isCertified: boolean;
+}

@@ -3,7 +3,7 @@ import { OffersRepository } from './offers.repository';
 import { ProvidersService } from '../providers/providers.service';
 import { RepairRequestsService } from '../repair-requests/repair-requests.service';
 import { UsersService } from '../users/users.service';
-import { EmailQueueService } from '../infra/email/email-queue.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { OfferStatus, PartsType } from './offers.types';
 import { VerificationStatus } from '../providers/providers.types';
 import { UserRole } from '../users/users.types';
@@ -85,9 +85,9 @@ describe('OffersService.Accept', () => {
         ),
     } as unknown as UsersService;
 
-    const emailQueueService = {
-      Enqueue: jest.fn().mockResolvedValue(undefined),
-    } as unknown as EmailQueueService;
+    const notificationsService = {
+      Notify: jest.fn().mockResolvedValue(undefined),
+    } as unknown as NotificationsService;
 
     const logger = {
       info: jest.fn(),
@@ -99,7 +99,7 @@ describe('OffersService.Accept', () => {
       providersService,
       repairRequestsService,
       usersService,
-      emailQueueService,
+      notificationsService,
       logger,
     );
 
@@ -107,7 +107,7 @@ describe('OffersService.Accept', () => {
       service,
       offersRepository,
       repairRequestsService,
-      emailQueueService,
+      notificationsService,
       offer,
     };
   }
@@ -121,7 +121,7 @@ describe('OffersService.Accept', () => {
       service,
       offersRepository,
       repairRequestsService,
-      emailQueueService,
+      notificationsService,
     } = BuildService({
       otherPending,
     });
@@ -138,8 +138,10 @@ describe('OffersService.Accept', () => {
       expect.objectContaining({ id: 'offer-2', status: OfferStatus.Rejected }),
       expect.objectContaining({ id: 'offer-3', status: OfferStatus.Rejected }),
     ]);
-    expect(emailQueueService.Enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'offer-accepted' }),
+    expect(notificationsService.Notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: expect.objectContaining({ kind: 'offer-accepted' }),
+      }),
     );
   });
 
@@ -213,9 +215,9 @@ describe('OffersService.Create', () => {
         ),
     } as unknown as UsersService;
 
-    const emailQueueService = {
-      Enqueue: jest.fn().mockResolvedValue(undefined),
-    } as unknown as EmailQueueService;
+    const notificationsService = {
+      Notify: jest.fn().mockResolvedValue(undefined),
+    } as unknown as NotificationsService;
 
     const logger = {
       info: jest.fn(),
@@ -227,15 +229,15 @@ describe('OffersService.Create', () => {
       providersService,
       repairRequestsService,
       usersService,
-      emailQueueService,
+      notificationsService,
       logger,
     );
 
-    return { service, repairRequestsService, emailQueueService };
+    return { service, repairRequestsService, notificationsService };
   }
 
   it('creates the offer and marks the request as offers_received', async () => {
-    const { service, repairRequestsService, emailQueueService } =
+    const { service, repairRequestsService, notificationsService } =
       BuildService(BuildRequest());
 
     await service.Create('provider-owner-1', {
@@ -250,8 +252,10 @@ describe('OffersService.Create', () => {
     expect(repairRequestsService.MarkOffersReceived).toHaveBeenCalledWith(
       'request-1',
     );
-    expect(emailQueueService.Enqueue).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'offer-received' }),
+    expect(notificationsService.Notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: expect.objectContaining({ kind: 'offer-received' }),
+      }),
     );
   });
 

@@ -13,7 +13,8 @@ import { OfferStatusTransitions } from './state/offer-status.transitions';
 import { ProvidersService } from '../providers/providers.service';
 import { RepairRequestsService } from '../repair-requests/repair-requests.service';
 import { UsersService } from '../users/users.service';
-import { EmailQueueService } from '../infra/email/email-queue.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/notifications.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
@@ -26,7 +27,7 @@ export class OffersService implements IOffersService {
     private readonly providersService: ProvidersService,
     private readonly repairRequestsService: RepairRequestsService,
     private readonly usersService: UsersService,
-    private readonly emailQueueService: EmailQueueService,
+    private readonly notificationsService: NotificationsService,
     @InjectPinoLogger(OffersService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -54,13 +55,21 @@ export class OffersService implements IOffersService {
     await this.repairRequestsService.MarkOffersReceived(input.requestId);
 
     const customer = await this.usersService.FindById(request.customerId);
-    await this.emailQueueService.Enqueue({
-      kind: 'offer-received',
-      payload: {
-        to: customer.email,
-        customerName: customer.fullName,
-        providerName: provider.businessName,
-        requestId: request.id,
+    await this.notificationsService.Notify({
+      userId: customer.id,
+      type: NotificationType.NewOffer,
+      title: 'New offer received',
+      body: `${provider.businessName} sent an offer for your repair request`,
+      relatedEntityType: 'offer',
+      relatedEntityId: offer.id,
+      email: {
+        kind: 'offer-received',
+        payload: {
+          to: customer.email,
+          customerName: customer.fullName,
+          providerName: provider.businessName,
+          requestId: request.id,
+        },
       },
     });
 
@@ -105,12 +114,20 @@ export class OffersService implements IOffersService {
     const providerOwner = await this.usersService.FindById(
       provider.ownerUserId,
     );
-    await this.emailQueueService.Enqueue({
-      kind: 'offer-accepted',
-      payload: {
-        to: providerOwner.email,
-        providerName: provider.businessName,
-        requestId: offer.requestId,
+    await this.notificationsService.Notify({
+      userId: providerOwner.id,
+      type: NotificationType.OfferAccepted,
+      title: 'Offer accepted',
+      body: `Your offer for repair request ${offer.requestId} was accepted`,
+      relatedEntityType: 'offer',
+      relatedEntityId: offer.id,
+      email: {
+        kind: 'offer-accepted',
+        payload: {
+          to: providerOwner.email,
+          providerName: provider.businessName,
+          requestId: offer.requestId,
+        },
       },
     });
 

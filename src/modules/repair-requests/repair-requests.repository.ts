@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { RepairRequest } from './entities/repair-request.entity';
-import { ListRepairRequestsFilter } from './repair-requests.types';
+import {
+  ListRepairRequestsFilter,
+  RequestStatus,
+} from './repair-requests.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import {
   IsQueryFailedError,
@@ -78,4 +81,30 @@ export class RepairRequestsRepository {
       throw error;
     }
   }
+
+  async CountByStatus(): Promise<Record<RequestStatus, number>> {
+    const rows = await this.repository
+      .createQueryBuilder('request')
+      .select('request.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('request.status')
+      .getRawMany<{ status: RequestStatus; count: string }>();
+
+    const counts = BuildEmptyStatusCounts();
+    for (const row of rows) {
+      counts[row.status] = Number(row.count);
+    }
+    return counts;
+  }
+}
+
+function BuildEmptyStatusCounts(): Record<RequestStatus, number> {
+  return {
+    [RequestStatus.Open]: 0,
+    [RequestStatus.OffersReceived]: 0,
+    [RequestStatus.Accepted]: 0,
+    [RequestStatus.InProgress]: 0,
+    [RequestStatus.Completed]: 0,
+    [RequestStatus.Cancelled]: 0,
+  };
 }

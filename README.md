@@ -3,11 +3,14 @@
 Backend API for Popravime — a repair-marketplace platform connecting people who need
 electronics/appliance repairs with verified service providers in Montenegro.
 
-This repository is **Phase 1** of the build: auth, users, cities, categories, providers,
-repair requests, and offers, plus all cross-cutting infrastructure (config, logging,
-centralized error handling, validation, Redis caching/rate-limiting/queues, storage, email).
-See `PROGRESS.md` for exact status and `.claude/plans/compressed-twirling-hummingbird.md` for
-the full Phase 1 plan. Coding standards live in `.claude/skills/coding-standards/SKILL.md`.
+This repository covers **Phase 1, 2, and 3** of the build: auth, users, cities, categories,
+providers, repair requests, and offers (Phase 1); reviews, direct inquiries, messages,
+notifications, and provider verification (Phase 2); CMS (blog posts, FAQ, price estimates),
+contact messages, audit logs, and admin analytics (Phase 3) — plus all cross-cutting
+infrastructure (config, logging, centralized error handling, validation, Redis
+caching/rate-limiting/queues, storage, email). See `PROGRESS.md` for exact status and
+`.claude/plans/compressed-twirling-hummingbird.md` for the full Phase 2/3 plan. Coding
+standards live in `.claude/skills/coding-standards/SKILL.md`.
 
 ## Stack
 
@@ -55,10 +58,21 @@ managed cloud Postgres instance, not this container.
 | `pnpm run seed:run` | Seed Montenegro cities + device categories |
 | `pnpm run lint` | ESLint |
 
-## Roadmap
+## Modules
 
-**Phase 2** (not yet built): `reviews`, `direct_inquiries`, `messages`, `notifications`,
-`verification_requests` (provider certification workflow).
+**Phase 1**: `auth`, `users`, `cities`, `categories`, `providers`, `repair-requests`, `offers`.
 
-**Phase 3** (not yet built): CMS (`blog_posts`, `faq_items`, `price_estimates`),
-`contact_messages`, `audit_logs`, admin analytics.
+**Phase 2**: `notifications` (single choke point for in-app + email dispatch), `reviews`
+(provider rating recomputed on every new review), `direct-inquiries`, `messages` (per-request or
+per-inquiry conversations), `verification-requests` (provider certification workflow, admin
+approve/reject).
+
+**Phase 3**: `blog-posts`, `faq-items`, `price-estimates` (public CMS content, cached),
+`contact-messages` (public submit, admin queue), `audit-logs` (write-only, wired into
+verification-request decisions), `admin` (`GET /admin/analytics` — provider verification
+breakdown, repair-request status breakdown, overall review stats, top cities by provider count).
+
+Every module in every phase follows the same shape — see `.claude/skills/coding-standards/SKILL.md`.
+
+Bootstrap admin: `pnpm run seed:run` creates one admin user (`ADMIN_EMAIL`/`ADMIN_PASSWORD`,
+both required env vars), idempotently — safe to re-run.

@@ -15,6 +15,15 @@ import { DomainForbiddenException } from '../../common/exceptions/forbidden.exce
 import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 import type { StorageService } from '../infra/storage/storage.service.interface';
 import { STORAGE_SERVICE } from '../../common/constants/di-tokens';
+import { UsersService } from '../users/users.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/notifications.types';
+
+const STATUS_CHANGE_NOTIFIABLE = new Set<RequestStatus>([
+  RequestStatus.InProgress,
+  RequestStatus.Completed,
+  RequestStatus.Cancelled,
+]);
 
 @Injectable()
 export class RepairRequestsService implements IRepairRequestsService {
@@ -22,6 +31,8 @@ export class RepairRequestsService implements IRepairRequestsService {
     private readonly repairRequestsRepository: RepairRequestsRepository,
     @Inject(STORAGE_SERVICE)
     private readonly storageService: StorageService,
+    private readonly usersService: UsersService,
+    private readonly notificationsService: NotificationsService,
     @InjectPinoLogger(RepairRequestsService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -86,6 +97,10 @@ export class RepairRequestsService implements IRepairRequestsService {
     return this.repairRequestsRepository.List(filter, page, limit);
   }
 
+  CountByStatus(): Promise<Record<RequestStatus, number>> {
+    return this.repairRequestsRepository.CountByStatus();
+  }
+
   async UpdateStatus(
     id: string,
     customerId: string,
@@ -98,12 +113,38 @@ export class RepairRequestsService implements IRepairRequestsService {
     request.status = status;
     const saved = await this.repairRequestsRepository.Save(request);
 
+    if (STATUS_CHANGE_NOTIFIABLE.has(status)) {
+      await this.NotifyStatusChange(saved);
+    }
+
     this.logger.info(
       { requestId: id, customerId, status },
       'Repair request status changed',
     );
 
     return saved;
+  }
+
+  private async NotifyStatusChange(request: RepairRequest): Promise<void> {
+    const customer = await this.usersService.FindById(request.customerId);
+
+    await this.notificationsService.Notify({
+      userId: customer.id,
+      type: NotificationType.StatusChange,
+      title: 'Repair request status changed',
+      body: `Your repair request is now: ${request.status}`,
+      relatedEntityType: 'repair_request',
+      relatedEntityId: request.id,
+      email: {
+        kind: 'status-change',
+        payload: {
+          to: customer.email,
+          customerName: customer.fullName,
+          status: request.status,
+          requestId: request.id,
+        },
+      },
+    });
   }
 
   async MarkOffersReceived(id: string): Promise<void> {

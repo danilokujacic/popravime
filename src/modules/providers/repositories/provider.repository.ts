@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Provider } from '../entities/provider.entity';
-import { ListProvidersFilter } from '../providers.types';
+import { ListProvidersFilter, VerificationStatus } from '../providers.types';
 import { PaginatedResult } from '../../../common/interfaces/paginated-result.interface';
 import {
   IsQueryFailedError,
@@ -92,5 +92,27 @@ export class ProviderRepository {
 
   async Delete(id: string): Promise<void> {
     await this.repository.delete({ id });
+  }
+
+  async CountByVerificationStatus(): Promise<
+    Record<VerificationStatus, number>
+  > {
+    const [pending, verified, rejected] = await Promise.all([
+      this.repository.count({
+        where: { verificationStatus: VerificationStatus.Pending },
+      }),
+      this.repository.count({
+        where: { verificationStatus: VerificationStatus.Verified },
+      }),
+      this.repository.count({
+        where: { verificationStatus: VerificationStatus.Rejected },
+      }),
+    ]);
+
+    return {
+      [VerificationStatus.Pending]: pending,
+      [VerificationStatus.Verified]: verified,
+      [VerificationStatus.Rejected]: rejected,
+    };
   }
 }

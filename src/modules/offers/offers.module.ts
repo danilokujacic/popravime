@@ -7,7 +7,7 @@ import { OffersController } from './offers.controller';
 import { ProvidersModule } from '../providers/providers.module';
 import { RepairRequestsModule } from '../repair-requests/repair-requests.module';
 import { UsersModule } from '../users/users.module';
-import { EmailModule } from '../infra/email/email.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -15,7 +15,7 @@ import { EmailModule } from '../infra/email/email.module';
     ProvidersModule,
     RepairRequestsModule,
     UsersModule,
-    EmailModule,
+    NotificationsModule,
   ],
   controllers: [OffersController],
   providers: [OffersRepository, OffersService],

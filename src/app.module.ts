@@ -25,6 +25,17 @@ import { EmailModule } from './modules/infra/email/email.module';
 import { ProvidersModule } from './modules/providers/providers.module';
 import { RepairRequestsModule } from './modules/repair-requests/repair-requests.module';
 import { OffersModule } from './modules/offers/offers.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { DirectInquiriesModule } from './modules/direct-inquiries/direct-inquiries.module';
+import { MessagesModule } from './modules/messages/messages.module';
+import { VerificationRequestsModule } from './modules/verification-requests/verification-requests.module';
+import { BlogPostsModule } from './modules/blog-posts/blog-posts.module';
+import { FaqItemsModule } from './modules/faq-items/faq-items.module';
+import { PriceEstimatesModule } from './modules/price-estimates/price-estimates.module';
+import { ContactMessagesModule } from './modules/contact-messages/contact-messages.module';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -53,6 +64,17 @@ import { OffersModule } from './modules/offers/offers.module';
     ProvidersModule,
     RepairRequestsModule,
     OffersModule,
+    NotificationsModule,
+    ReviewsModule,
+    DirectInquiriesModule,
+    MessagesModule,
+    VerificationRequestsModule,
+    BlogPostsModule,
+    FaqItemsModule,
+    PriceEstimatesModule,
+    ContactMessagesModule,
+    AuditLogsModule,
+    AdminModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: DomainExceptionFilter },

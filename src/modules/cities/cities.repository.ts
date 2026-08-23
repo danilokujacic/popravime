@@ -47,4 +47,11 @@ export class CitiesRepository {
       throw error;
     }
   }
+
+  TopByProviderCount(limit: number): Promise<City[]> {
+    return this.repository.find({
+      order: { providerCount: 'DESC' },
+      take: limit,
+    });
+  }
 }
