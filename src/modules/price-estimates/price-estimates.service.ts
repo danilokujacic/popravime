@@ -10,6 +10,7 @@ import {
 import { IPriceEstimatesService } from './price-estimates.service.interface';
 import { CacheService } from '../infra/cache/cache.service';
 import { CACHE_KEYS } from '../infra/cache/cache-keys.constants';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 
 const PRICE_ESTIMATES_CACHE_TTL_SECONDS = 3600;
@@ -23,6 +24,7 @@ export class PriceEstimatesService implements IPriceEstimatesService {
   constructor(
     private readonly priceEstimatesRepository: PriceEstimatesRepository,
     private readonly cacheService: CacheService,
+    private readonly auditLogsService: AuditLogsService,
     @InjectPinoLogger(PriceEstimatesService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -46,7 +48,10 @@ export class PriceEstimatesService implements IPriceEstimatesService {
     return estimate;
   }
 
-  async Create(input: CreatePriceEstimateInput): Promise<PriceEstimate> {
+  async Create(
+    adminId: string,
+    input: CreatePriceEstimateInput,
+  ): Promise<PriceEstimate> {
     const estimate = await this.priceEstimatesRepository.Create({
       categoryId: input.categoryId,
       serviceType: input.serviceType,
@@ -56,6 +61,12 @@ export class PriceEstimatesService implements IPriceEstimatesService {
     });
 
     await this.InvalidateCache(input.categoryId);
+    await this.auditLogsService.Log({
+      actorId: adminId,
+      action: 'price_estimate.created',
+      entityType: 'price_estimate',
+      entityId: estimate.id,
+    });
     this.logger.info(
       { priceEstimateId: estimate.id },
       'Price estimate created',
@@ -66,6 +77,7 @@ export class PriceEstimatesService implements IPriceEstimatesService {
 
   async Update(
     id: string,
+    adminId: string,
     input: UpdatePriceEstimateInput,
   ): Promise<PriceEstimate> {
     const estimate = await this.FindById(id);
@@ -74,15 +86,27 @@ export class PriceEstimatesService implements IPriceEstimatesService {
 
     const saved = await this.priceEstimatesRepository.Save(estimate);
     await this.InvalidateCache(estimate.categoryId);
+    await this.auditLogsService.Log({
+      actorId: adminId,
+      action: 'price_estimate.updated',
+      entityType: 'price_estimate',
+      entityId: id,
+    });
     this.logger.info({ priceEstimateId: id }, 'Price estimate updated');
 
     return saved;
   }
 
-  async Delete(id: string): Promise<void> {
+  async Delete(id: string, adminId: string): Promise<void> {
     const estimate = await this.FindById(id);
     await this.priceEstimatesRepository.Delete(id);
     await this.InvalidateCache(estimate.categoryId);
+    await this.auditLogsService.Log({
+      actorId: adminId,
+      action: 'price_estimate.deleted',
+      entityType: 'price_estimate',
+      entityId: id,
+    });
     this.logger.info({ priceEstimateId: id }, 'Price estimate deleted');
   }
 

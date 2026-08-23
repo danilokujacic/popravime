@@ -1,18 +1,18 @@
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 import {
   ArrayMinSize,
   ArrayUnique,
   IsArray,
   IsEmail,
-  IsObject,
   IsOptional,
   IsString,
   IsUUID,
   IsUrl,
   MaxLength,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
-import type { WorkingHours } from '../providers.types';
+import { WorkingHoursDto } from './working-hours.dto';
 
 export class CreateProviderDto {
   @IsString()
@@ -48,9 +48,10 @@ export class CreateProviderDto {
   website?: string;
 
   @IsOptional()
-  @IsObject()
+  @ValidateNested()
+  @Type(() => WorkingHoursDto)
   @Expose({ name: 'working_hours' })
-  workingHours?: WorkingHours;
+  workingHours?: WorkingHoursDto;
 
   @IsArray()
   @ArrayMinSize(1)

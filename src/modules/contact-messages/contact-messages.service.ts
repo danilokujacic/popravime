@@ -8,6 +8,7 @@ import {
   ListContactMessagesFilter,
 } from './contact-messages.types';
 import { IContactMessagesService } from './contact-messages.service.interface';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 
@@ -15,6 +16,7 @@ import { DomainNotFoundException } from '../../common/exceptions/not-found.excep
 export class ContactMessagesService implements IContactMessagesService {
   constructor(
     private readonly contactMessagesRepository: ContactMessagesRepository,
+    private readonly auditLogsService: AuditLogsService,
     @InjectPinoLogger(ContactMessagesService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -37,12 +39,20 @@ export class ContactMessagesService implements IContactMessagesService {
 
   async UpdateStatus(
     id: string,
+    adminId: string,
     status: ContactMessageStatus,
   ): Promise<ContactMessage> {
     const message = await this.GetOrThrow(id);
     message.status = status;
 
     const saved = await this.contactMessagesRepository.Save(message);
+    await this.auditLogsService.Log({
+      actorId: adminId,
+      action: 'contact_message.status_changed',
+      entityType: 'contact_message',
+      entityId: id,
+      metadata: { status },
+    });
     this.logger.info(
       { contactMessageId: id, status },
       'Contact message status changed',

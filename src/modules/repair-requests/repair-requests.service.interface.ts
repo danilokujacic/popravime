@@ -5,6 +5,7 @@ import {
   RequestStatus,
 } from './repair-requests.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+import { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 
 export interface IRepairRequestsService {
   Create(
@@ -12,6 +13,10 @@ export interface IRepairRequestsService {
     input: CreateRepairRequestInput,
   ): Promise<RepairRequest>;
   FindById(id: string): Promise<RepairRequest>;
+  FindByIdForViewer(
+    id: string,
+    viewer: AuthenticatedUser,
+  ): Promise<RepairRequest>;
   List(
     filter: ListRepairRequestsFilter,
     page: number,

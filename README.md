@@ -8,9 +8,13 @@ providers, repair requests, and offers (Phase 1); reviews, direct inquiries, mes
 notifications, and provider verification (Phase 2); CMS (blog posts, FAQ, price estimates),
 contact messages, audit logs, and admin analytics (Phase 3) — plus all cross-cutting
 infrastructure (config, logging, centralized error handling, validation, Redis
-caching/rate-limiting/queues, storage, email). See `PROGRESS.md` for exact status and
-`.claude/plans/compressed-twirling-hummingbird.md` for the full Phase 2/3 plan. Coding
-standards live in `.claude/skills/coding-standards/SKILL.md`.
+caching/rate-limiting/queues, storage, email). **Phases 4–6** followed up with hardening, not
+new features: real DB transactions around every multi-write orchestration
+(`typeorm-transactional`), repair-request view scoping, deep `working_hours` validation, a
+correct provider-gallery storage-key fix, a dedicated contact-message rate limit, and audit-log
+coverage for every remaining admin mutation. See `PROGRESS.md` for exact status (including the
+Phase 4–6 write-up) and `.claude/plans/compressed-twirling-hummingbird.md` for the full plan.
+Coding standards live in `.claude/skills/coding-standards/SKILL.md`.
 
 ## Stack
 

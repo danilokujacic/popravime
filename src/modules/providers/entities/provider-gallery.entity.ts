@@ -25,6 +25,9 @@ export class ProviderGallery {
   @Column({ name: 'image_url', type: 'text' })
   imageUrl: string;
 
+  @Column({ name: 'storage_key', type: 'text', nullable: true })
+  storageKey: string | null;
+
   @Column({ type: 'text', nullable: true })
   caption: string | null;
 

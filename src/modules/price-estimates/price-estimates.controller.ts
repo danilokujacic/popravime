@@ -19,6 +19,8 @@ import { PriceEstimateResponseMapper } from './mappers/price-estimate-response.m
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { UserRole } from '../users/users.types';
 
 @Controller('price-estimates')
@@ -41,8 +43,9 @@ export class PriceEstimatesController {
   @Post()
   async Create(
     @Body() dto: CreatePriceEstimateDto,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<PriceEstimateResponseDto> {
-    const estimate = await this.priceEstimatesService.Create({
+    const estimate = await this.priceEstimatesService.Create(user.id, {
       categoryId: dto.categoryId,
       serviceType: dto.serviceType,
       priceMin: dto.priceMin,
@@ -58,8 +61,9 @@ export class PriceEstimatesController {
   async Update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePriceEstimateDto,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<PriceEstimateResponseDto> {
-    const estimate = await this.priceEstimatesService.Update(id, {
+    const estimate = await this.priceEstimatesService.Update(id, user.id, {
       serviceType: dto.serviceType,
       priceMin: dto.priceMin,
       priceMax: dto.priceMax,
@@ -71,7 +75,10 @@ export class PriceEstimatesController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.Admin)
   @Delete(':id')
-  Remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.priceEstimatesService.Delete(id);
+  Remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.priceEstimatesService.Delete(id, user.id);
   }
 }

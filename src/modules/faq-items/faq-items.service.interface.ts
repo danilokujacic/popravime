@@ -4,7 +4,11 @@ import { CreateFaqItemInput, UpdateFaqItemInput } from './faq-items.types';
 export interface IFaqItemsService {
   List(): Promise<FaqItem[]>;
   FindById(id: string): Promise<FaqItem>;
-  Create(input: CreateFaqItemInput): Promise<FaqItem>;
-  Update(id: string, input: UpdateFaqItemInput): Promise<FaqItem>;
-  Delete(id: string): Promise<void>;
+  Create(adminId: string, input: CreateFaqItemInput): Promise<FaqItem>;
+  Update(
+    id: string,
+    adminId: string,
+    input: UpdateFaqItemInput,
+  ): Promise<FaqItem>;
+  Delete(id: string, adminId: string): Promise<void>;
 }

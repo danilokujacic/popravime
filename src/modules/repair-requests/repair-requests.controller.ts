@@ -70,8 +70,12 @@ export class RepairRequestsController {
   @Get(':id')
   async FindOne(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<RepairRequestResponseDto> {
-    const request = await this.repairRequestsService.FindById(id);
+    const request = await this.repairRequestsService.FindByIdForViewer(
+      id,
+      user,
+    );
     return RepairRequestResponseMapper.ToDto(request);
   }
 

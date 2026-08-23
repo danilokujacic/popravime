@@ -6,6 +6,7 @@ import { CreateFaqItemInput, UpdateFaqItemInput } from './faq-items.types';
 import { IFaqItemsService } from './faq-items.service.interface';
 import { CacheService } from '../infra/cache/cache.service';
 import { CACHE_KEYS } from '../infra/cache/cache-keys.constants';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 
 const FAQ_CACHE_TTL_SECONDS = 3600;
@@ -15,6 +16,7 @@ export class FaqItemsService implements IFaqItemsService {
   constructor(
     private readonly faqItemsRepository: FaqItemsRepository,
     private readonly cacheService: CacheService,
+    private readonly auditLogsService: AuditLogsService,
     @InjectPinoLogger(FaqItemsService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -38,7 +40,7 @@ export class FaqItemsService implements IFaqItemsService {
     return item;
   }
 
-  async Create(input: CreateFaqItemInput): Promise<FaqItem> {
+  async Create(adminId: string, input: CreateFaqItemInput): Promise<FaqItem> {
     const item = await this.faqItemsRepository.Create({
       question: input.question,
       answer: input.answer,
@@ -47,27 +49,49 @@ export class FaqItemsService implements IFaqItemsService {
     });
 
     await this.InvalidateCache();
+    await this.auditLogsService.Log({
+      actorId: adminId,
+      action: 'faq_item.created',
+      entityType: 'faq_item',
+      entityId: item.id,
+    });
     this.logger.info({ faqItemId: item.id }, 'FAQ item created');
 
     return item;
   }
 
-  async Update(id: string, input: UpdateFaqItemInput): Promise<FaqItem> {
+  async Update(
+    id: string,
+    adminId: string,
+    input: UpdateFaqItemInput,
+  ): Promise<FaqItem> {
     const item = await this.FindById(id);
     ApplyTextFields(item, input);
     ApplySortOrder(item, input);
 
     const saved = await this.faqItemsRepository.Save(item);
     await this.InvalidateCache();
+    await this.auditLogsService.Log({
+      actorId: adminId,
+      action: 'faq_item.updated',
+      entityType: 'faq_item',
+      entityId: id,
+    });
     this.logger.info({ faqItemId: id }, 'FAQ item updated');
 
     return saved;
   }
 
-  async Delete(id: string): Promise<void> {
+  async Delete(id: string, adminId: string): Promise<void> {
     await this.FindById(id);
     await this.faqItemsRepository.Delete(id);
     await this.InvalidateCache();
+    await this.auditLogsService.Log({
+      actorId: adminId,
+      action: 'faq_item.deleted',
+      entityType: 'faq_item',
+      entityId: id,
+    });
     this.logger.info({ faqItemId: id }, 'FAQ item deleted');
   }
 

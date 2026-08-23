@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { Transactional } from 'typeorm-transactional';
 import { RepairRequestsRepository } from './repair-requests.repository';
 import { RepairRequest } from './entities/repair-request.entity';
 import {
@@ -18,6 +19,8 @@ import { STORAGE_SERVICE } from '../../common/constants/di-tokens';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/notifications.types';
+import { UserRole } from '../users/users.types';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 
 const STATUS_CHANGE_NOTIFIABLE = new Set<RequestStatus>([
   RequestStatus.InProgress,
@@ -89,6 +92,30 @@ export class RepairRequestsService implements IRepairRequestsService {
     return request;
   }
 
+  async FindByIdForViewer(
+    id: string,
+    viewer: AuthenticatedUser,
+  ): Promise<RepairRequest> {
+    const request = await this.FindById(id);
+    this.EnsureViewable(request, viewer);
+    return request;
+  }
+
+  private EnsureViewable(
+    request: RepairRequest,
+    viewer: AuthenticatedUser,
+  ): void {
+    if (viewer.role !== UserRole.Customer) {
+      return;
+    }
+    if (request.customerId !== viewer.id) {
+      throw new DomainForbiddenException(
+        'REPAIR_REQUEST_NOT_OWNED',
+        'You do not own this repair request',
+      );
+    }
+  }
+
   List(
     filter: ListRepairRequestsFilter,
     page: number,
@@ -101,6 +128,7 @@ export class RepairRequestsService implements IRepairRequestsService {
     return this.repairRequestsRepository.CountByStatus();
   }
 
+  @Transactional()
   async UpdateStatus(
     id: string,
     customerId: string,
@@ -162,6 +190,7 @@ export class RepairRequestsService implements IRepairRequestsService {
     );
   }
 
+  @Transactional()
   async AcceptOffer(
     id: string,
     offerId: string,

@@ -8,7 +8,14 @@ import {
 export interface IPriceEstimatesService {
   List(filter: ListPriceEstimatesFilter): Promise<PriceEstimate[]>;
   FindById(id: string): Promise<PriceEstimate>;
-  Create(input: CreatePriceEstimateInput): Promise<PriceEstimate>;
-  Update(id: string, input: UpdatePriceEstimateInput): Promise<PriceEstimate>;
-  Delete(id: string): Promise<void>;
+  Create(
+    adminId: string,
+    input: CreatePriceEstimateInput,
+  ): Promise<PriceEstimate>;
+  Update(
+    id: string,
+    adminId: string,
+    input: UpdatePriceEstimateInput,
+  ): Promise<PriceEstimate>;
+  Delete(id: string, adminId: string): Promise<void>;
 }

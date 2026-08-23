@@ -1,12 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { Transactional } from 'typeorm-transactional';
 import { OffersRepository } from './offers.repository';
 import { Offer } from './entities/offer.entity';
-import {
-  CreateOfferInput,
-  ListOffersFilter,
-  OfferStatus,
-} from './offers.types';
+import { OfferStatus } from './offers.types';
+import type { CreateOfferInput, ListOffersFilter } from './offers.types';
 import { RequestStatus } from '../repair-requests/repair-requests.types';
 import { IOffersService } from './offers.service.interface';
 import { OfferStatusTransitions } from './state/offer-status.transitions';
@@ -32,6 +30,7 @@ export class OffersService implements IOffersService {
     private readonly logger: PinoLogger,
   ) {}
 
+  @Transactional()
   async Create(
     providerOwnerId: string,
     input: CreateOfferInput,
@@ -85,6 +84,7 @@ export class OffersService implements IOffersService {
     return offer;
   }
 
+  @Transactional()
   async Accept(offerId: string, customerId: string): Promise<Offer> {
     const offer = await this.FindById(offerId);
     this.EnsureTransition(offer.status, OfferStatus.Accepted);

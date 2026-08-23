@@ -10,6 +10,7 @@ export interface IContactMessagesService {
   Create(input: CreateContactMessageInput): Promise<ContactMessage>;
   UpdateStatus(
     id: string,
+    adminId: string,
     status: ContactMessageStatus,
   ): Promise<ContactMessage>;
   List(

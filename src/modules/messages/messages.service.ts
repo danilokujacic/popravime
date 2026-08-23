@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { Transactional } from 'typeorm-transactional';
 import { MessagesRepository } from './messages.repository';
 import { Message } from './entities/message.entity';
-import { CreateMessageInput, ListMessagesFilter } from './messages.types';
+import type { CreateMessageInput, ListMessagesFilter } from './messages.types';
 import { IMessagesService } from './messages.service.interface';
 import { RepairRequestsService } from '../repair-requests/repair-requests.service';
 import { OffersService } from '../offers/offers.service';
@@ -37,6 +38,7 @@ export class MessagesService implements IMessagesService {
     private readonly logger: PinoLogger,
   ) {}
 
+  @Transactional()
   async Create(senderId: string, input: CreateMessageInput): Promise<Message> {
     const ref = this.ResolveConversationRef(input.requestId, input.inquiryId);
     const participants = await this.ResolveParticipants(ref);

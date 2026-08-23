@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { Transactional } from 'typeorm-transactional';
 import { VerificationRequestsRepository } from './verification-requests.repository';
 import { VerificationRequest } from './entities/verification-request.entity';
 import {
@@ -105,6 +106,7 @@ export class VerificationRequestsService implements IVerificationRequestsService
     return this.verificationRequestsRepository.List(filter, page, limit);
   }
 
+  @Transactional()
   private async Decide(
     id: string,
     adminId: string,

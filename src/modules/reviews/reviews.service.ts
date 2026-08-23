@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { Transactional } from 'typeorm-transactional';
 import { ReviewsRepository } from './reviews.repository';
 import { Review } from './entities/review.entity';
-import { CreateReviewInput, OverallReviewStats } from './reviews.types';
+import type { CreateReviewInput, OverallReviewStats } from './reviews.types';
 import { IReviewsService } from './reviews.service.interface';
 import { ProviderRatingCalculator } from './calculators/provider-rating.calculator';
 import { RepairRequestsService } from '../repair-requests/repair-requests.service';
@@ -31,6 +32,7 @@ export class ReviewsService implements IReviewsService {
     private readonly logger: PinoLogger,
   ) {}
 
+  @Transactional()
   async Create(customerId: string, input: CreateReviewInput): Promise<Review> {
     const request = await this.repairRequestsService.FindById(input.requestId);
     this.EnsureRequestOwnership(request.customerId, customerId);

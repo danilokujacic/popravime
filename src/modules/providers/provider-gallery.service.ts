@@ -42,6 +42,7 @@ export class ProviderGalleryService implements IProviderGalleryService {
     const image = await this.providerGalleryRepository.Add({
       providerId,
       imageUrl: uploaded.url,
+      storageKey: uploaded.key,
       caption: input.caption ?? null,
     });
 
@@ -66,11 +67,17 @@ export class ProviderGalleryService implements IProviderGalleryService {
       );
     }
 
-    const key = image.imageUrl.substring(image.imageUrl.lastIndexOf('/') + 1);
-    await this.storageService.Delete(key);
+    await this.storageService.Delete(this.ResolveStorageKey(image));
     await this.providerGalleryRepository.Delete(imageId);
 
     this.logger.info({ providerId, imageId }, 'Gallery image deleted');
+  }
+
+  private ResolveStorageKey(image: ProviderGallery): string {
+    if (image.storageKey) {
+      return image.storageKey;
+    }
+    return image.imageUrl.substring(image.imageUrl.lastIndexOf('/') + 1);
   }
 
   private EnsureOwnership(providerOwnerId: string, ownerUserId: string): void {

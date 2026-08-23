@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { Transactional } from 'typeorm-transactional';
 import { DirectInquiriesRepository } from './direct-inquiries.repository';
 import { DirectInquiry } from './entities/direct-inquiry.entity';
-import {
+import { InquiryStatus } from './direct-inquiries.types';
+import type {
   CreateDirectInquiryInput,
-  InquiryStatus,
   ListDirectInquiriesFilter,
 } from './direct-inquiries.types';
 import { IDirectInquiriesService } from './direct-inquiries.service.interface';
@@ -28,6 +29,7 @@ export class DirectInquiriesService implements IDirectInquiriesService {
     private readonly logger: PinoLogger,
   ) {}
 
+  @Transactional()
   async Create(input: CreateDirectInquiryInput): Promise<DirectInquiry> {
     if (!input.customerId) {
       this.EnsureGuestContactInfo(input);

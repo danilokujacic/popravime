@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { runOnTransactionCommit } from 'typeorm-transactional';
 import { NotificationsRepository } from './notifications.repository';
 import { Notification } from './entities/notification.entity';
 import { NotifyInput } from './notifications.types';
@@ -28,7 +29,7 @@ export class NotificationsService implements INotificationsService {
       relatedEntityId: input.relatedEntityId ?? null,
     });
 
-    await this.emailQueueService.Enqueue(input.email);
+    this.EnqueueEmailOnCommit(input.email);
 
     this.logger.info(
       {
@@ -40,6 +41,20 @@ export class NotificationsService implements INotificationsService {
     );
 
     return notification;
+  }
+
+  private EnqueueEmailOnCommit(email: NotifyInput['email']): void {
+    try {
+      runOnTransactionCommit(() => {
+        void this.emailQueueService.Enqueue(email);
+      });
+    } catch {
+      this.logger.warn(
+        { emailKind: email.kind },
+        'Notify called outside a transactional context, enqueueing immediately',
+      );
+      void this.emailQueueService.Enqueue(email);
+    }
   }
 
   ListForUser(

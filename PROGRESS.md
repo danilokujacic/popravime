@@ -10,6 +10,11 @@ Docker Compose, is written but unverified — no Docker in this sandbox). Phase 
 steps 20–39 done per `.claude/plans/compressed-twirling-hummingbird.md` — see the "Phase 2 + 3"
 section below for the full write-up.
 
+Phases 4–6 are also done — these are **not new product scope**, they close out the concrete
+backlog Phase 1/2/3 already disclosed above (transactional integrity, ownership/validation
+hardening, audit-trail completeness, and a re-attempt at Docker Compose). See the "Phase 4 + 5 +
+6" section below.
+
 ## What's done, all verified working live against a real Postgres + Redis
 
 1. **Config** — `src/config/*.config.ts` (registerAs namespaces) + `env.validation.ts` (Joi).
@@ -55,14 +60,20 @@ Full unit suite: **40/40 passing**, `tsc --noEmit` clean, `pnpm run lint` clean 
 
 ## What's left
 
-### Step 18 — Docker Compose (written, unverified)
+### Step 18 — Docker Compose (written, still unverified — re-checked in Phase 6)
 `docker-compose.yml`, `Dockerfile`, `nginx/nginx.conf` exist per the plan (api/postgres/redis/
 minio/maildev/nginx, dev-only postgres, edge/internal network split) but `docker compose up`
-has never actually been run — no Docker daemon in this sandbox. Needs a real pass in an
-environment with Docker: `docker compose up --build`, then confirm `/health` through nginx
-reports both `database` and `redis` up, then exercise one full vertical slice through nginx.
-Also: the `test:integration` suite genuinely needs a Docker-capable run to confirm it passes,
-not just compiles.
+has never actually been run. Re-checked as part of Phase 6 (build-order step 64): still no
+Docker daemon available in this sandbox — `docker info` fails, there's no `dockerd` binary, no
+`docker.service` systemd unit, and no `/var/run/docker.sock`; only a Docker Desktop *client*
+pointed at a socket that lives outside this sandbox. Confirmed genuinely blocked, not just
+unattempted. One thing *was* verified without a daemon: `docker compose config` (pure
+syntax/interpolation, no daemon needed) resolves cleanly and correctly picks up every `.env`
+variable added across Phases 2–6, including the newest `THROTTLE_CONTACT_MESSAGE_*` pair — so
+the compose file itself is structurally sound. Still needs a real pass in an environment with
+Docker: `docker compose up --build`, confirm `/health` through nginx reports both `database` and
+`redis` up, exercise one full vertical slice through nginx, and run `pnpm run test:integration`
+for real (it also can't be executed here for the same reason).
 
 ### Step 19 — Final pass: done
 `tsc --noEmit` clean, full `pnpm run lint` clean (see notes below on the handful of targeted
@@ -302,9 +313,128 @@ were still running and were reused directly:
   throttle** — a public, unauthenticated endpoint, so it inherits whatever `THROTTLE_DEFAULT_*`
   is configured to but has no dedicated stricter limit the way `/auth/login` does.
 
+## Phase 4 + 5 + 6
+
+Full plan: `.claude/plans/compressed-twirling-hummingbird.md`. Unlike Phases 1–3, this is **not
+new product scope** — it's the concrete backlog Phase 1/2/3 already disclosed above (see "Known
+Phase 1 simplifications" / "Known Phase 2/3 simplifications"), now closed out.
+
+### What's done
+
+**Phase 4 — transactional integrity** (build-order steps 57–58): added `typeorm-transactional`
+(`@Transactional()` + `addTransactionalDataSource`, wired into `database.module.ts`'s
+`dataSourceFactory` and `main.ts`'s bootstrap). `@Transactional()` now covers every service
+method that performs more than one related DB write: `OffersService.Create`/`Accept`,
+`RepairRequestsService.UpdateStatus`/`AcceptOffer`, `ReviewsService.Create`,
+`MessagesService.Create`, `DirectInquiriesService.Create`, and
+`VerificationRequestsService`'s private `Decide` — not just the two literally named in the
+disclosure, everywhere the same pattern existed. `NotificationsService.Notify`'s email enqueue
+now runs inside `runOnTransactionCommit(...)`, so a rollback anywhere in the surrounding
+transaction means no notification row *and* no email, not an email fired for a rolled-back
+action — with a try/catch fallback to immediate enqueue (logged as a warning) for the case where
+`Notify` is ever called outside a transactional context.
+
+**Phase 5 — validation & authorization hardening** (steps 59–62): `GET /repair-requests/:id`
+now scopes by viewer (`RepairRequestsService.FindByIdForViewer` — a customer only sees their
+own, provider owners and admins see any); `working_hours` validates real per-weekday shape
+(`WorkingHoursDto`/`WorkingHoursRangeDto`, `HH:MM` time format, unknown weekday keys rejected)
+instead of a bare `@IsObject()`; provider gallery images now store their S3 `storage_key`
+directly (new nullable `provider_gallery.storage_key` column) instead of re-deriving it from the
+URL on delete, with a fallback to the old derivation for any pre-existing rows; contact message
+submission now has its own dedicated throttle (`THROTTLE_CONTACT_MESSAGE_LIMIT`/`_TTL_MS`, env-
+configurable, same pattern as `AUTH_THROTTLE`) instead of only the global default.
+
+**Phase 6 — audit trail completeness + Docker re-check** (steps 63–64): `AuditLogsService.Log`
+is now called from `ContactMessagesService.UpdateStatus`, and
+`FaqItemsService`/`PriceEstimatesService`'s `Create`/`Update`/`Delete` — closing the gap flagged
+in Phase 2/3 ("`audit_logs` is currently only written from one call site"). Docker Compose was
+re-attempted and re-confirmed still blocked in this sandbox (see the Step 18 note above).
+
+Full unit suite: **70/70 passing** (17 suites), `tsc --noEmit` clean, `pnpm run lint` clean (0
+errors) across the whole repo.
+
+### Real bugs caught by live-testing (not just `tsc`)
+
+1. **`@nestjs/typeorm`'s connection-retry logic breaks `addTransactionalDataSource` on retry.**
+   `TypeOrmModule.forRootAsync`'s built-in retry mechanism re-invokes `dataSourceFactory` on
+   every failed connection attempt. The first naive implementation called
+   `addTransactionalDataSource(new DataSource(options))` unconditionally on each invocation —
+   `addTransactionalDataSource` throws `DataSource with name "default" has already added` if a
+   DataSource is already registered under that name, so after the *first* retry, every
+   subsequent attempt failed with that error instead of the real underlying connection error,
+   permanently masking it. Caught live: the app hung retrying with the wrong error message when
+   Redis (an unrelated dependency) was down. Fixed by checking `getDataSourceByName('default')`
+   first and reusing the already-registered instance across retries.
+2. **The plan's own assumption about Jest compatibility was wrong.** The approved plan assumed
+   "`@Transactional()` is transparent to mocked repositories in unit tests, since
+   typeorm-transactional only activates against a real DataSource" — false. The decorator throws
+   at call time unless `initializeTransactionalContext()` has run in-process (which `main.ts`
+   does, but Jest never executes `main.ts`), and then throws again unless a DataSource is
+   actually registered. Fixed properly, not by loosening a test: added `src/jest-setup.ts`
+   (`initializeTransactionalContext()` + `reflect-metadata`, wired via Jest's `setupFiles`) and a
+   manual mock `src/__mocks__/typeorm-transactional.ts` (Jest auto-applies node_modules manual
+   mocks with zero per-spec-file boilerplate) implementing exactly the library's own documented
+   "Unit Test Mocking" recommendation. `test/jest-setup.ts` was added separately for the
+   integration-test config, which does *not* get the mock (it needs the real library against a
+   real Postgres, when Docker becomes available).
+
+### Live verification performed this session
+
+The scratch Postgres/Redis/MinIO environment from Phases 1–3 was gone at the start of this
+phase (sandbox restart) and had to be rebuilt from scratch **twice** during this phase (a second
+mid-session restart) using the same recipe each time — `initdb`/`pg_ctl` for Postgres,
+`.deb`-extraction for Redis, a downloaded static binary + `mc` for MinIO. Each time, all 20
+migrations were re-run cleanly and the app was rebooted and re-verified from scratch:
+
+- **Transaction atomicity, proven, not just asserted**: created two competing offers on a repair
+  request, then temporarily inserted a deliberate `throw` into `OffersService.Accept` right
+  after the offer's own status was saved but before the "reject other offers" step, restarted
+  the app, and attempted the accept over real HTTP. It failed with a 500 as expected — and
+  critically, **neither** the offer's status **nor** the request's status (both already written
+  earlier in the same method call) were persisted; both reverted to their pre-attempt values.
+  Reverted the induced failure, restarted, retried the same accept — it succeeded cleanly, the
+  competing offer auto-rejected, and the request flipped to `accepted`. This is the core
+  guarantee Phase 4 exists to provide, confirmed against a real Postgres transaction, not
+  inferred from code review.
+- Full vertical slice re-run end-to-end with every `@Transactional()`-decorated method exercised
+  in sequence (register → create provider, with real Nominatim geocoding → repair request →
+  offer → accept → in\_progress → completed → review) — provider `average_rating`/`review_count`
+  updated correctly, notifications delivered to the right users at each step.
+- `GET /repair-requests/:id`: confirmed 200 for the owning customer, 200 for a provider owner
+  viewing someone else's request, and 403 (`REPAIR_REQUEST_NOT_OWNED`) for a different customer.
+- `working_hours`: confirmed 400 for a bad time format (`"9am"`), 400 for an unknown weekday key
+  (`forbidNonWhitelisted` correctly rejecting `"funday"`), and 200 for a valid partial week.
+- Provider gallery: uploaded a real file to MinIO, confirmed `provider_gallery.storage_key` was
+  populated correctly in Postgres, then deleted it via the API and confirmed via `mc ls` that the
+  object was **actually gone from the MinIO bucket**, not just the DB row.
+- Contact message throttle: 3 requests succeeded, the 4th and 5th both correctly returned 429.
+- Audit trail: logged in as admin, created/updated/deleted a FAQ item, created/updated a price
+  estimate, and changed a contact message's status — confirmed all 6 expected `audit_logs` rows
+  appeared with the correct `action`/`entity_type`/`entity_id`/`actor_id`, and that
+  `contact_message.status_changed` carried the right `metadata`. Also re-confirmed the public
+  `GET /faq-items`/`GET /price-estimates` routes still reflect the changes correctly (cache
+  invalidation unaffected by the audit-log addition).
+
+### Known Phase 4–6 simplifications (disclosed, not hidden)
+
+- **`NotificationsService`'s no-transactional-context fallback path is untested by a dedicated
+  unit test.** `EnqueueEmailOnCommit`'s `catch` branch (immediate enqueue + a warning log, for
+  the hypothetical case where `Notify` is ever called from outside a `@Transactional()` method)
+  is currently only exercised implicitly — every actual call site today *is* transactional, so
+  this path never fires in practice. Cheap to add a direct test later if a new, non-transactional
+  caller of `Notify` is ever introduced.
+- **`WorkingHoursDto` validates shape and time format, not logical ordering** — nothing rejects
+  `{ open: "18:00", close: "09:00" }` (close before open). Out of scope for what Phase 1's
+  disclosure actually asked for ("not per-weekday-shape" — now fixed), but a legitimate further
+  tightening if this ever needs to be bulletproof against nonsensical (not just malformed) input.
+- **`provider_gallery.storage_key` is nullable**, not backfilled for rows created before this
+  migration — the service falls back to the old URL-derivation logic only when `storage_key` is
+  null, so old rows keep working exactly as before, new rows get the real fix.
+
 ## Nothing has been committed to git yet
 The repo already had one base commit (`accd99d init` — the bare `nest new` scaffold) before
-this work started. Everything since is uncommitted: as of the end of Phase 2/3, `git status
---short` shows 25 modified tracked files and 30 new untracked paths (whole new module
-directories for every Phase 1/2/3 module, `test/integration/`, migrations, etc.). No commits
+this work started. Everything since is uncommitted: as of the end of Phase 4/5/6, `git status
+--short` shows 34 modified tracked files and 11 new untracked paths (whole new module
+directories for every Phase 1/2/3 module, `test/integration/`, migrations, the Phase 4–6
+additions like `src/__mocks__/`, `src/jest-setup.ts`, `test/jest-setup.ts`, etc.). No commits
 made this session — waiting for review.

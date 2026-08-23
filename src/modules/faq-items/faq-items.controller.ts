@@ -17,6 +17,8 @@ import { FaqItemResponseMapper } from './mappers/faq-item-response.mapper';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { UserRole } from '../users/users.types';
 
 @Controller('faq-items')
@@ -33,8 +35,11 @@ export class FaqItemsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.Admin)
   @Post()
-  async Create(@Body() dto: CreateFaqItemDto): Promise<FaqItemResponseDto> {
-    const item = await this.faqItemsService.Create({
+  async Create(
+    @Body() dto: CreateFaqItemDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<FaqItemResponseDto> {
+    const item = await this.faqItemsService.Create(user.id, {
       question: dto.question,
       answer: dto.answer,
       category: dto.category,
@@ -49,8 +54,9 @@ export class FaqItemsController {
   async Update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateFaqItemDto,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<FaqItemResponseDto> {
-    const item = await this.faqItemsService.Update(id, {
+    const item = await this.faqItemsService.Update(id, user.id, {
       question: dto.question,
       answer: dto.answer,
       category: dto.category,
@@ -62,7 +68,10 @@ export class FaqItemsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.Admin)
   @Delete(':id')
-  Remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.faqItemsService.Delete(id);
+  Remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.faqItemsService.Delete(id, user.id);
   }
 }

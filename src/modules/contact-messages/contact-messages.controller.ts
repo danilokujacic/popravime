@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ContactMessagesService } from './contact-messages.service';
 import { CreateContactMessageDto } from './dto/create-contact-message.dto';
 import { UpdateContactMessageStatusDto } from './dto/update-contact-message-status.dto';
@@ -18,8 +19,11 @@ import { ContactMessageResponseMapper } from './mappers/contact-message-response
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { UserRole } from '../users/users.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+import { CONTACT_MESSAGE_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
 
 @Controller('contact-messages')
 export class ContactMessagesController {
@@ -28,6 +32,7 @@ export class ContactMessagesController {
   ) {}
 
   @Public()
+  @Throttle(CONTACT_MESSAGE_THROTTLE)
   @Post()
   async Create(
     @Body() dto: CreateContactMessageDto,
@@ -64,9 +69,11 @@ export class ContactMessagesController {
   async UpdateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateContactMessageStatusDto,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<ContactMessageResponseDto> {
     const message = await this.contactMessagesService.UpdateStatus(
       id,
+      user.id,
       dto.status,
     );
     return ContactMessageResponseMapper.ToDto(message);
