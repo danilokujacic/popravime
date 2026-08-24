@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { DOCUMENT_UPLOAD_OPTIONS } from '../../common/upload/upload-limits.constants';
 import { VerificationRequestsService } from './verification-requests.service';
 import { SubmitVerificationRequestDto } from './dto/submit-verification-request.dto';
 import { ReviewVerificationRequestDto } from './dto/review-verification-request.dto';
@@ -33,7 +34,7 @@ export class VerificationRequestsController {
   ) {}
 
   @Roles(UserRole.ProviderOwner)
-  @UseInterceptors(FileInterceptor('document'))
+  @UseInterceptors(FileInterceptor('document', DOCUMENT_UPLOAD_OPTIONS))
   @Post()
   async Submit(
     @CurrentUser() user: AuthenticatedUser,

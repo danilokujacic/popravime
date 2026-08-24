@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { IMAGE_UPLOAD_OPTIONS } from '../../common/upload/upload-limits.constants';
 import { RepairRequestsService } from './repair-requests.service';
 import { CreateRepairRequestDto } from './dto/create-repair-request.dto';
 import { UpdateRepairRequestStatusDto } from './dto/update-repair-request-status.dto';
@@ -81,7 +82,7 @@ export class RepairRequestsController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.Customer)
-  @UseInterceptors(FilesInterceptor('photos', MAX_PHOTOS))
+  @UseInterceptors(FilesInterceptor('photos', MAX_PHOTOS, IMAGE_UPLOAD_OPTIONS))
   @Post()
   async Create(
     @CurrentUser() user: AuthenticatedUser,

@@ -14,9 +14,15 @@ Phases 4–6 are also done — these are **not new product scope**, they close o
 backlog Phase 1/2/3 already disclosed above (transactional integrity, ownership/validation
 hardening, audit-trail completeness, and a re-attempt at Docker Compose). See the "Phase 4 + 5 +
 6" section below. A small follow-up "Closeout pass" after that resolved the last three items
-Phase 4–6 itself disclosed as still-open (see that section, near the end) — at that point the
-only genuinely outstanding item left in this whole log is the Docker/`test:integration` one,
-which is blocked by the sandbox environment, not by any remaining code work.
+Phase 4–6 itself disclosed as still-open (see that section, near the end).
+
+After that, a **"Prod/demo readiness pass"** (see that section below) audited and closed the
+gaps a real frontend integration or demo deploy would actually hit: CORS, `helmet`, response
+compression, graceful shutdown, unbounded file uploads, a dead `emailVerified` field, and a
+logout endpoint that didn't actually revoke anything. The only genuinely outstanding item left
+in this whole log is Docker Compose / `test:integration` execution, blocked by the sandbox
+environment having no Docker daemon at all — not by any remaining code work. See
+`FRONTEND_INTEGRATION.md` for what a frontend needs to build against this API.
 
 ## What's done, all verified working live against a real Postgres + Redis
 
@@ -463,10 +469,79 @@ confirms strict `<` not `<=`); valid ordering → 200. Uploaded a fresh gallery 
 upload, `storage_key` populated correctly against the new `NOT NULL` column), deleted it via the
 API, confirmed via `mc ls` the object was actually gone from the bucket, not just the DB row.
 
+## Prod/demo readiness pass
+
+Asked directly "what is necessary for this to be prod or demo ready" — an actual audit, not
+another backlog-closing pass, since by this point PROGRESS.md's disclosed backlog was empty.
+Checked the gaps a real frontend integration or a demo deploy would hit immediately and closed
+the ones that were genuine gaps, not judgment calls:
+
+1. **CORS** — was completely unconfigured; any browser-based frontend on a different origin
+   would have had every request blocked. `app.enableCors({...})` in `main.ts`, origin list from
+   a new `CORS_ORIGIN` env var (comma-separated, defaults to reflecting any origin if unset —
+   fine for dev, meant to be locked down in `.env` for a real deploy).
+2. **`helmet`** — was not installed at all. Added, wired in `main.ts`; live-verified
+   `Strict-Transport-Security`/`X-Content-Type-Options`/`X-Frame-Options` are now present on
+   every response.
+3. **`compression`** — same, added and wired; live-verified `Content-Encoding: gzip` on a
+   `GET /cities` response with `Accept-Encoding: gzip`.
+4. **`app.enableShutdownHooks()`** — one line, lets NestJS clean up DB/Redis connections on
+   `SIGTERM` instead of the process just dying mid-connection.
+5. **Unbounded file uploads.** All four multipart endpoints (provider gallery image, repair
+   request photos, verification document, message attachment) accepted files of any size and
+   any MIME type — a real abuse vector, not a style nit. New
+   `src/common/upload/upload-limits.constants.ts`: `IMAGE_UPLOAD_OPTIONS` (5 MB,
+   jpeg/png/webp only) for gallery+repair-photos, `DOCUMENT_UPLOAD_OPTIONS` (10 MB, adds PDF)
+   for verification documents+message attachments — both reject wrong types via `fileFilter`
+   (`415 Unsupported Media Type`) and oversized files via multer's own `limits.fileSize`
+   (`413 Payload Too Large`), live-verified against a real 6 MB PNG and a `text/plain` file.
+6. **Dead `emailVerified` field removed**, not left as a flow-shaped hole — nothing ever set it,
+   register/login both ignored it entirely. Migration
+   (`1787395703251-drop-users-email-verified.ts`) drops the column; removed from the entity,
+   `UserResponseDto`, and the mapper. (Explicitly decided not to build a real email-verification
+   flow for now — immediate-login-on-register stays the behavior.)
+7. **`POST /auth/logout` was a complete no-op** — returned 204 but never touched the refresh
+   token, so a "logged out" refresh token stayed valid until it naturally expired (up to 7 days).
+   Fixed with real, per-session revocation: `JwtPayload` gained a `jti` (unique per token-pair
+   issuance); a new `RefreshTokenDenylistService` (Redis-backed via the existing `CacheService`,
+   extended with generic `Set`/`Get`) records a revoked `jti` with a TTL matching that token's
+   own remaining lifetime; `RefreshTokenStrategy.validate` now checks the denylist before
+   accepting any refresh token and rejects with 401 if revoked. `Logout` now requires the
+   `refresh_token` in the body (same extraction as `/auth/refresh`) so it knows exactly which
+   session to revoke — only that one device/session is affected, not all of a user's sessions.
+   Live-verified: refreshed successfully, logged out with that same token, retried the identical
+   refresh → 401 "Refresh token has been revoked"; confirmed a *different* still-live session's
+   refresh token kept working throughout, proving the revocation is per-session, not global.
+8. **Docker Compose re-checked once more** — still genuinely blocked in this sandbox (no
+   change since the Phase 6 check).
+
+Full unit suite: **77/77 passing** (19 suites — new this pass: a `Logout` case added to
+`auth.service.spec.ts`, and the new `refresh-token.strategy.spec.ts`), `tsc --noEmit` clean,
+`pnpm run lint` clean.
+
+### Known limitations after this pass (disclosed, not hidden)
+
+- **No password-reset flow.** Explicitly scoped out for now (a real decision, not an oversight)
+  — there is no "forgot password" endpoint. A user who loses their password has no self-service
+  recovery path. Worth building before a real production launch; skipped here to keep this pass
+  bounded to genuine gaps rather than open-ended new scope.
+- **No email-verification gate**, per the decision above — anyone can register with any email
+  address they claim, including one they don't own, and use the app immediately.
+- **CORS defaults permissive if `CORS_ORIGIN` is unset** (reflects any origin) — fine for local
+  dev against this repo's own `.env`, but must be set to the real frontend's origin(s) before any
+  actual deployment; `.env.example` documents this but doesn't enforce it.
+- **File upload limits are fixed constants**, not configurable per-environment via `.env` — a
+  deliberate simplification (matches how `MAX_PHOTOS` was already a fixed constant, not env-
+  driven, before this pass) rather than adding more surface to the "ask before adding a new env
+  var" judgment call for something this unlikely to need runtime tuning.
+
 ## Git status
-Phases 1 through 6 are committed: `accd99d init` (bare `nest new` scaffold) → `b71afc1 phase 1`
-→ `c4b4e75 phase 2 and 3` → `78cdd26 phases 4,5,6`. The last of those was committed by the user
-directly, not by this session. Only the Closeout pass above (the three items closing out the
-last of the disclosed backlog) is uncommitted as of now — `git status --short` shows 6 modified
-tracked files and 3 new untracked paths (the new migration, `notifications.service.spec.ts`,
-`close-after-open.validator.ts`). Waiting for review before committing.
+Phases 1 through 6, and the Closeout pass, are committed: `accd99d init` → `b71afc1 phase 1` →
+`c4b4e75 phase 2 and 3` → `78cdd26 phases 4,5,6` → `3e4df3b progress` (the Closeout pass,
+committed by the user directly, not by this session). Only the Prod/demo readiness pass above is
+uncommitted as of now — `git status --short` shows 22 modified tracked files (including this
+file) and 6 new untracked
+paths (`src/common/upload/`, `1787395703251-drop-users-email-verified.ts`,
+`src/modules/auth/decorators/`, `refresh-token-session.interface.ts`,
+`refresh-token-denylist.service.ts`, `refresh-token.strategy.spec.ts`). Waiting for review before
+committing.

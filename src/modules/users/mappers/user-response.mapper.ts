@@ -9,7 +9,6 @@ export class UserResponseMapper {
     dto.fullName = user.fullName;
     dto.phone = user.phone;
     dto.role = user.role;
-    dto.emailVerified = user.emailVerified;
     dto.createdAt = user.createdAt;
     return dto;
   }

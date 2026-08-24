@@ -11,6 +11,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { DOCUMENT_UPLOAD_OPTIONS } from '../../common/upload/upload-limits.constants';
 import { MessagesService } from './messages.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { ListMessagesQueryDto } from './dto/list-messages-query.dto';
@@ -35,7 +36,7 @@ export class MessagesController {
     return messages.map(MessageResponseMapper.ToDto);
   }
 
-  @UseInterceptors(FileInterceptor('attachment'))
+  @UseInterceptors(FileInterceptor('attachment', DOCUMENT_UPLOAD_OPTIONS))
   @Post()
   async Create(
     @CurrentUser() user: AuthenticatedUser,

@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { ConfigType } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { UsersService } from '../users/users.service';
 import { PasswordHasher } from '../../shared/password/password-hasher';
@@ -9,11 +10,13 @@ import { CreateUserInput, UserRole } from '../users/users.types';
 import { LoginInput } from './auth.types';
 import { TokenPair } from './interfaces/token-pair.interface';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { RefreshTokenSession } from './interfaces/refresh-token-session.interface';
 import { IAuthService } from './auth.service.interface';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 import { DomainUnauthorizedException } from '../../common/exceptions/unauthorized.exception';
 import { EmailQueueService } from '../infra/email/email-queue.service';
+import { RefreshTokenDenylistService } from './refresh-token-denylist.service';
 
 @Injectable()
 export class AuthService implements IAuthService {
@@ -22,6 +25,7 @@ export class AuthService implements IAuthService {
     private readonly passwordHasher: PasswordHasher,
     private readonly jwtService: JwtService,
     private readonly emailQueueService: EmailQueueService,
+    private readonly refreshTokenDenylistService: RefreshTokenDenylistService,
     @Inject(jwtConfig.KEY)
     private readonly config: ConfigType<typeof jwtConfig>,
     @InjectPinoLogger(AuthService.name)
@@ -94,12 +98,21 @@ export class AuthService implements IAuthService {
     return this.IssueTokens(user.id, user.email, user.role);
   }
 
+  async Logout(session: RefreshTokenSession): Promise<void> {
+    const ttlSeconds = Math.max(
+      1,
+      Math.ceil((session.expiresAt.getTime() - Date.now()) / 1000),
+    );
+    await this.refreshTokenDenylistService.Revoke(session.jti, ttlSeconds);
+    this.logger.info({ userId: session.id }, 'User logged out');
+  }
+
   private async IssueTokens(
     userId: string,
     email: string,
     role: UserRole,
   ): Promise<TokenPair> {
-    const payload: JwtPayload = { sub: userId, email, role };
+    const payload: JwtPayload = { sub: userId, email, role, jti: randomUUID() };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {

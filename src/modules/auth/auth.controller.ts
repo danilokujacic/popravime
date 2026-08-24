@@ -16,6 +16,8 @@ import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { AUTH_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
+import { CurrentRefreshSession } from './decorators/current-refresh-session.decorator';
+import type { RefreshTokenSession } from './interfaces/refresh-token-session.interface';
 
 @Controller('auth')
 export class AuthController {
@@ -52,7 +54,11 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle(AUTH_THROTTLE)
+  @UseGuards(AuthGuard('jwt-refresh'))
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('logout')
-  Logout(): void {}
+  Logout(@CurrentRefreshSession() session: RefreshTokenSession): Promise<void> {
+    return this.authService.Logout(session);
+  }
 }

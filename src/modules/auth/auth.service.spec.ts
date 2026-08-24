@@ -8,6 +8,7 @@ import { DomainUnauthorizedException } from '../../common/exceptions/unauthorize
 function BuildService(overrides?: {
   usersService?: Partial<UsersService>;
   passwordHasher?: Partial<PasswordHasher>;
+  refreshTokenDenylistService?: Record<string, jest.Mock>;
 }) {
   const usersService = {
     FindByEmail: jest.fn().mockResolvedValue(null),
@@ -29,6 +30,12 @@ function BuildService(overrides?: {
     Enqueue: jest.fn().mockResolvedValue(undefined),
   } as unknown as ConstructorParameters<typeof AuthService>[3];
 
+  const refreshTokenDenylistService = {
+    Revoke: jest.fn().mockResolvedValue(undefined),
+    IsRevoked: jest.fn().mockResolvedValue(false),
+    ...overrides?.refreshTokenDenylistService,
+  } as unknown as ConstructorParameters<typeof AuthService>[4];
+
   const config = {
     accessSecret: 'access-secret',
     accessExpiresInSeconds: 900,
@@ -39,18 +46,24 @@ function BuildService(overrides?: {
   const logger = {
     warn: jest.fn(),
     info: jest.fn(),
-  } as unknown as ConstructorParameters<typeof AuthService>[5];
+  } as unknown as ConstructorParameters<typeof AuthService>[6];
 
   const service = new AuthService(
     usersService,
     passwordHasher,
     jwtService,
     emailQueueService,
+    refreshTokenDenylistService,
     config,
     logger,
   );
 
-  return { service, usersService, passwordHasher };
+  return {
+    service,
+    usersService,
+    passwordHasher,
+    refreshTokenDenylistService,
+  };
 }
 
 describe('AuthService', () => {
@@ -158,6 +171,26 @@ describe('AuthService', () => {
         accessToken: 'signed-token',
         refreshToken: 'signed-token',
       });
+    });
+  });
+
+  describe('Logout', () => {
+    it('revokes the refresh token for its remaining lifetime', async () => {
+      const { service, refreshTokenDenylistService } = BuildService();
+
+      const expiresAt = new Date(Date.now() + 60_000);
+      await service.Logout({
+        id: 'user-1',
+        email: 'ana@popravime.me',
+        role: UserRole.Customer,
+        jti: 'jti-1',
+        expiresAt,
+      });
+
+      expect(refreshTokenDenylistService.Revoke).toHaveBeenCalledWith(
+        'jti-1',
+        expect.any(Number),
+      );
     });
   });
 });

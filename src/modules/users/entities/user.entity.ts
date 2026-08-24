@@ -32,9 +32,6 @@ export class User {
   })
   role: UserRole;
 
-  @Column({ name: 'email_verified', type: 'boolean', default: false })
-  emailVerified: boolean;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

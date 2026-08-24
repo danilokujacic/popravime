@@ -14,6 +14,14 @@ export class CacheService {
     return this.cache.wrap(key, factory, ttlSeconds * 1000);
   }
 
+  async Set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
+    await this.cache.set(key, value, ttlSeconds * 1000);
+  }
+
+  Get<T>(key: string): Promise<T | undefined> {
+    return this.cache.get<T>(key);
+  }
+
   Delete(key: string): Promise<boolean> {
     return this.cache.del(key);
   }

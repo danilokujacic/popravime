@@ -13,6 +13,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { IMAGE_UPLOAD_OPTIONS } from '../../common/upload/upload-limits.constants';
 import { ProvidersService } from './providers.service';
 import { ProviderGalleryService } from './provider-gallery.service';
 import { CreateProviderDto } from './dto/create-provider.dto';
@@ -135,7 +136,7 @@ export class ProvidersController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ProviderOwner)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', IMAGE_UPLOAD_OPTIONS))
   @Post(':id/gallery')
   async AddGalleryImage(
     @Param('id', ParseUUIDPipe) id: string,
