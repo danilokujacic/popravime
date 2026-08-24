@@ -15,8 +15,8 @@ export async function SeedAdmin(dataSource: DataSource): Promise<void> {
   const passwordHash = await passwordHasher.Hash(password);
 
   await dataSource.query(
-    `INSERT INTO "users" ("email", "password_hash", "full_name", "role", "email_verified")
-     VALUES ($1, $2, $3, 'admin', true)
+    `INSERT INTO "users" ("email", "password_hash", "full_name", "role")
+     VALUES ($1, $2, $3, 'admin')
      ON CONFLICT ("email") DO NOTHING`,
     [email, passwordHash, 'Admin'],
   );

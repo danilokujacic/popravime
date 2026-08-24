@@ -19,9 +19,10 @@ Phase 4–6 itself disclosed as still-open (see that section, near the end).
 After that, a **"Prod/demo readiness pass"** (see that section below) audited and closed the
 gaps a real frontend integration or demo deploy would actually hit: CORS, `helmet`, response
 compression, graceful shutdown, unbounded file uploads, a dead `emailVerified` field, and a
-logout endpoint that didn't actually revoke anything. The only genuinely outstanding item left
-in this whole log is Docker Compose / `test:integration` execution, blocked by the sandbox
-environment having no Docker daemon at all — not by any remaining code work. See
+logout endpoint that didn't actually revoke anything. This sandbox still has no Docker daemon of
+its own, but the user ran a real `docker compose up --build` on their own machine — the first
+actual Docker execution of this whole project — and it surfaced one genuine bug (see "Real
+Docker build bug" below), now fixed and re-verified as far as this sandbox can. See
 `FRONTEND_INTEGRATION.md` for what a frontend needs to build against this API.
 
 ## What's done, all verified working live against a real Postgres + Redis
@@ -535,13 +536,49 @@ Full unit suite: **77/77 passing** (19 suites — new this pass: a `Logout` case
   driven, before this pass) rather than adding more surface to the "ask before adding a new env
   var" judgment call for something this unlikely to need runtime tuning.
 
+## Real Docker build bug (found by the user, outside this sandbox)
+
+The user has Docker locally and ran `docker compose up --build` for real — the first actual
+Docker execution this project has ever gotten, since this sandbox has never had a daemon. It
+failed on the runtime stage's `pnpm install --frozen-lockfile --prod`:
+
+```
+Ignored build scripts: @scarf/scarf@1.4.0, bcrypt@6.0.0, msgpackr-extract@3.0.4, protobufjs@7.6.5
+Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+failed to solve: process "/bin/sh -c pnpm install --frozen-lockfile --prod" did not complete
+successfully: exit code: 1
+```
+
+**Real bug, not a Docker-environment quirk**: pnpm 10+ blocks native-module install/postinstall
+scripts by default (a supply-chain-security default) unless the project explicitly approves
+them. Normally `pnpm approve-builds` handles this via an interactive picker — but a Docker
+`RUN` step has no TTY, so it can't prompt, and pnpm exits non-zero instead of silently guessing.
+This would have broken every Docker build, not just the user's — genuinely missing project
+config, not something specific to their machine.
+
+Fixed by adding `pnpm-workspace.yaml` (not `package.json`'s `pnpm` field — tried that first,
+pnpm 11.14 warns that field is no longer read and points at `pnpm-workspace.yaml` instead):
+
+```yaml
+onlyBuiltDependencies:
+  - bcrypt          # native binding required — no pure-JS fallback in this package
+  - msgpackr-extract
+  - protobufjs
+ignoredBuiltDependencies:
+  - '@scarf/scarf'  # pure install-time telemetry, transitive via swagger-ui-dist
+```
+
+Live-verified in this sandbox (not inside Docker, but the exact failing command): deleted
+`node_modules` entirely, ran `pnpm install --frozen-lockfile --prod` — same command, same flags
+as the Dockerfile's `RUN` line — confirmed exit code `0` (previously would have been `1`), and
+confirmed `bcrypt` is actually functional afterward (`require('bcrypt').hash(...)` succeeds,
+via a prebuilt binary for `linux-x64`, no compilation even needed). This should unblock the
+user's real Docker build; still can't confirm the full `docker compose up` end-to-end in this
+sandbox since there's still no daemon here.
+
 ## Git status
-Phases 1 through 6, and the Closeout pass, are committed: `accd99d init` → `b71afc1 phase 1` →
-`c4b4e75 phase 2 and 3` → `78cdd26 phases 4,5,6` → `3e4df3b progress` (the Closeout pass,
-committed by the user directly, not by this session). Only the Prod/demo readiness pass above is
-uncommitted as of now — `git status --short` shows 22 modified tracked files (including this
-file) and 6 new untracked
-paths (`src/common/upload/`, `1787395703251-drop-users-email-verified.ts`,
-`src/modules/auth/decorators/`, `refresh-token-session.interface.ts`,
-`refresh-token-denylist.service.ts`, `refresh-token.strategy.spec.ts`). Waiting for review before
-committing.
+Everything through the Prod/demo readiness pass is committed: `accd99d init` → `b71afc1 phase 1`
+→ `c4b4e75 phase 2 and 3` → `78cdd26 phases 4,5,6` → `3e4df3b progress` (Closeout pass) →
+`385bf31 progress` (Prod/demo readiness pass) — the last two committed by the user directly, not
+by this session. Only the pnpm-workspace Docker-build fix above (`pnpm-workspace.yaml`, new) and
+this file's own edits are uncommitted as of now. Waiting for review before committing.

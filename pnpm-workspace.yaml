@@ -1,0 +1,7 @@
+onlyBuiltDependencies:
+  - bcrypt
+  - msgpackr-extract
+  - protobufjs
+
+ignoredBuiltDependencies:
+  - '@scarf/scarf'

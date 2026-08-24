@@ -1,51 +1,51 @@
 services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    networks: [edge, internal]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      maildev:
-        condition: service_started
-    env_file: .env
-    environment:
-      DATABASE_HOST: postgres
-      REDIS_HOST: redis
-      STORAGE_ENDPOINT: http://minio:9000
-      EMAIL_HOST: maildev
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   networks: [ edge, internal ]
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
+  #     maildev:
+  #       condition: service_started
+  #   env_file: .env
+  #   environment:
+  #     DATABASE_HOST: postgres
+  #     REDIS_HOST: redis
+  #     STORAGE_ENDPOINT: http://minio:9000
+  #     EMAIL_HOST: maildev
 
   postgres:
     # Local development only. Production uses a managed cloud Postgres instance,
     # never this container.
     image: postgres:16-alpine
-    networks: [internal]
+    networks: [ internal ]
     environment:
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
-    ports: ['5432:5432']
+    ports: [ '5432:5432' ]
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}']
+      test: [ 'CMD-SHELL', 'pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}' ]
       interval: 5s
       timeout: 5s
       retries: 10
 
   redis:
     image: redis:7-alpine
-    networks: [internal]
-    ports: ['6379:6379']
+    networks: [ internal ]
+    ports: [ '6379:6379' ]
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: [ 'CMD', 'redis-cli', 'ping' ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -54,7 +54,7 @@ services:
     # Local development stand-in for Cloudflare R2 (both S3-compatible).
     image: minio/minio
     command: server /data --console-address ":9001"
-    networks: [internal]
+    networks: [ internal ]
     environment:
       MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY}
@@ -64,7 +64,7 @@ services:
     volumes:
       - miniodata:/data
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      test: [ 'CMD', 'mc', 'ready', 'local' ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -72,18 +72,17 @@ services:
   maildev:
     # Local development stand-in for the production SMTP relay.
     image: maildev/maildev
-    networks: [internal]
+    networks: [ internal ]
     ports:
       - '1080:1080'
       - '1025:1025'
-
-  nginx:
-    image: nginx:alpine
-    networks: [edge]
-    depends_on: [api]
-    ports: ['80:80']
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+  # nginx:
+  #   image: nginx:alpine
+  #   networks: [ edge ]
+  #   depends_on: [ api ]
+  #   ports: [ '80:80' ]
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
 networks:
   edge:
