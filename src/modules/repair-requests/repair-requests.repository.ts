@@ -26,9 +26,12 @@ export class RepairRequestsRepository {
   ): Promise<PaginatedResult<RepairRequest>> {
     const query = this.repository
       .createQueryBuilder('request')
-      .where('(:status::text IS NULL OR request.status = :status)', {
-        status: filter.status ?? null,
-      })
+      .where(
+        '(:status::text IS NULL OR request.status = :status::request_status_enum)',
+        {
+          status: filter.status ?? null,
+        },
+      )
       .andWhere('(:cityId::uuid IS NULL OR request.cityId = :cityId)', {
         cityId: filter.cityId ?? null,
       })
@@ -44,9 +47,12 @@ export class RepairRequestsRepository {
           customerId: filter.customerId ?? null,
         },
       )
-      .andWhere('(:urgency::text IS NULL OR request.urgency = :urgency)', {
-        urgency: filter.urgency ?? null,
-      })
+      .andWhere(
+        '(:urgency::text IS NULL OR request.urgency = :urgency::urgency_enum)',
+        {
+          urgency: filter.urgency ?? null,
+        },
+      )
       .orderBy('request.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);

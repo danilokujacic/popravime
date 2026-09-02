@@ -576,9 +576,47 @@ via a prebuilt binary for `linux-x64`, no compilation even needed). This should 
 user's real Docker build; still can't confirm the full `docker compose up` end-to-end in this
 sandbox since there's still no daemon here.
 
+## Real bug: enum-column filters crashed on QueryBuilder-based repositories
+
+First real usage against real data (the user's own frontend, `GET /providers?page=1&limit=100`)
+hit a `500`: `QueryFailedError: operator does not exist: verification_status_enum = text`.
+
+**Root cause**: every optional-filter `WHERE` clause built with raw QueryBuilder SQL follows the
+pattern `(:param::text IS NULL OR column = :param)` — the `::text` cast on the first (null-check)
+usage fixes that parameter's inferred type as `text` for the *entire* prepared statement,
+including its second, uncast usage compared directly against an enum column. Postgres won't
+implicitly compare a custom enum type to `text`, so any request that didn't pass that particular
+filter (the common case — no `verification_status` query param at all) crashed. A request that
+*did* pass a value happened to still work in earlier ad-hoc testing, which is why 6+ phases of
+live-testing never caught this — the "no filter" path specifically wasn't hit against this exact
+query shape until now.
+
+**Systemic, not isolated** — the same pattern existed in four repositories, all now fixed by
+casting the comparison side to the actual PG enum type name too:
+- `ProviderRepository.List` — `verification_status = :verificationStatus::verification_status_enum`
+- `DirectInquiriesRepository.List` — `status = :status::inquiry_status_enum`
+- `RepairRequestsRepository.List` — `status = :status::request_status_enum`,
+  `urgency = :urgency::urgency_enum`
+- `OffersRepository.List` — `status = :status::offer_status_enum`
+
+Checked every other QueryBuilder-based repository (`reviews`, `users`, `audit-logs`) — `audit-logs`'
+`entityType`/`action` optional filters use the same `::text IS NULL OR ...` shape but compare
+against genuinely `text` columns, not enums, so they were never affected. Repositories using
+TypeORM's `find()`/`findAndCount()` with a plain `where` object (`contact-messages`,
+`verification-requests`, `blog-posts`, `reviews`) are a different code path entirely — TypeORM's
+own entity metadata handles the enum typing correctly there, immune to this bug by construction.
+
+Live-verified against the user's real running instance and real database (not a fresh scratch
+DB): the exact originally-failing request now returns `200` with real data; confirmed the
+`verification_status`-filtered case (which worked before) still works; confirmed
+`repair-requests` with both `status` and `urgency` filters set; confirmed the `direct_inquiries`
+fix's SQL directly via `psql` (both the null-check and real-value forms execute cleanly).
+`tsc`/lint/unit suite all still green (77/77).
+
 ## Git status
 Everything through the Prod/demo readiness pass is committed: `accd99d init` → `b71afc1 phase 1`
 → `c4b4e75 phase 2 and 3` → `78cdd26 phases 4,5,6` → `3e4df3b progress` (Closeout pass) →
 `385bf31 progress` (Prod/demo readiness pass) — the last two committed by the user directly, not
-by this session. Only the pnpm-workspace Docker-build fix above (`pnpm-workspace.yaml`, new) and
-this file's own edits are uncommitted as of now. Waiting for review before committing.
+by this session. Uncommitted as of now: the pnpm-workspace Docker-build fix
+(`pnpm-workspace.yaml`, new), the enum-filter bug fix (4 repository files), and this file's own
+edits. Waiting for review before committing.

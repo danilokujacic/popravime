@@ -26,9 +26,12 @@ export class DirectInquiriesRepository {
       .where('inquiry.providerId = :providerId', {
         providerId: filter.providerId,
       })
-      .andWhere('(:status::text IS NULL OR inquiry.status = :status)', {
-        status: filter.status ?? null,
-      })
+      .andWhere(
+        '(:status::text IS NULL OR inquiry.status = :status::inquiry_status_enum)',
+        {
+          status: filter.status ?? null,
+        },
+      )
       .orderBy('inquiry.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);

@@ -41,7 +41,7 @@ export class ProviderRepository {
         },
       )
       .andWhere(
-        '(:verificationStatus::text IS NULL OR provider.verificationStatus = :verificationStatus)',
+        '(:verificationStatus::text IS NULL OR provider.verificationStatus = :verificationStatus::verification_status_enum)',
         {
           verificationStatus: filter.verificationStatus ?? null,
         },

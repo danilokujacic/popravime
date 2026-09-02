@@ -32,9 +32,12 @@ export class OffersRepository {
           providerId: filter.providerId ?? null,
         },
       )
-      .andWhere('(:status::text IS NULL OR offer.status = :status)', {
-        status: filter.status ?? null,
-      })
+      .andWhere(
+        '(:status::text IS NULL OR offer.status = :status::offer_status_enum)',
+        {
+          status: filter.status ?? null,
+        },
+      )
       .orderBy('offer.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
