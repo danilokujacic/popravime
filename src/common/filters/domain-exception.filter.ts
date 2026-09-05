@@ -8,10 +8,12 @@ import {
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Request, Response } from 'express';
 import { DomainException } from '../exceptions/domain.exception';
+import { ValidationFieldError } from '../validation/validation-field-error.interface';
 
 interface ErrorBody {
   code: string;
   message: string;
+  fields?: ValidationFieldError[];
   statusCode: number;
   path: string;
   timestamp: string;
@@ -21,6 +23,8 @@ const SERVER_ERROR_THRESHOLD: number = HttpStatus.INTERNAL_SERVER_ERROR;
 
 interface HttpExceptionBody {
   message?: string | string[];
+  code?: string;
+  fields?: ValidationFieldError[];
 }
 
 function HasMessage(body: object): body is HttpExceptionBody {
@@ -30,6 +34,7 @@ function HasMessage(body: object): body is HttpExceptionBody {
 function ExtractHttpBody(exception: HttpException): {
   code: string;
   message: string;
+  fields?: ValidationFieldError[];
 } {
   const body = exception.getResponse();
   if (typeof body === 'string') {
@@ -38,8 +43,9 @@ function ExtractHttpBody(exception: HttpException): {
   if (HasMessage(body) && body.message !== undefined) {
     const message = body.message;
     return {
-      code: exception.name,
+      code: body.code ?? exception.name,
       message: Array.isArray(message) ? message.join(', ') : message,
+      fields: body.fields,
     };
   }
   return { code: exception.name, message: exception.message };
@@ -77,10 +83,11 @@ export class DomainExceptionFilter implements ExceptionFilter {
     }
 
     if (exception instanceof HttpException) {
-      const { code, message } = ExtractHttpBody(exception);
+      const { code, message, fields } = ExtractHttpBody(exception);
       return {
         code,
         message,
+        fields,
         statusCode: exception.getStatus(),
         path,
         timestamp,

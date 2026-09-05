@@ -1,6 +1,7 @@
 {
   "moduleFileExtensions": ["js", "json", "ts"],
-  "rootDir": ".",
+  "rootDir": "..",
+  "maxWorkers": 1,
   "setupFiles": ["<rootDir>/test/jest-setup.ts"],
   "testEnvironment": "node",
   "testRegex": "\\.(e2e|integration)-spec\\.ts$",

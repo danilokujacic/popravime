@@ -25,6 +25,8 @@ export interface CreateProviderInput {
   description?: string;
   address: string;
   cityId: string;
+  latitude?: string;
+  longitude?: string;
   phone?: string;
   email?: string;
   website?: string;
@@ -36,6 +38,8 @@ export interface UpdateProviderInput {
   businessName?: string;
   description?: string;
   address?: string;
+  latitude?: string;
+  longitude?: string;
   phone?: string;
   email?: string;
   website?: string;
@@ -53,7 +57,6 @@ export interface ListProvidersFilter {
   cityId?: string;
   categoryId?: string;
   search?: string;
-  verificationStatus?: VerificationStatus;
 }
 
 export interface UpdateRatingStatsInput {

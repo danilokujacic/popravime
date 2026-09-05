@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { UsersRepository } from './users.repository';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { User } from './entities/user.entity';
 import {
   CreateUserInput,
+  OAuthProfile,
   UpdateUserInput,
   UserCredentials,
+  UserRole,
 } from './users.types';
 import { IUsersService } from './users.service.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
@@ -43,6 +46,42 @@ export class UsersService implements IUsersService {
 
   FindCredentials(email: string): Promise<UserCredentials | null> {
     return this.usersRepository.FindCredentials(email);
+  }
+
+  async FindOAuthMatch(profile: OAuthProfile): Promise<User | null> {
+    const byIdentity = await this.usersRepository.FindByOAuthIdentity(
+      profile.provider,
+      profile.providerId,
+    );
+    if (byIdentity) {
+      return byIdentity;
+    }
+
+    const byEmail = await this.usersRepository.FindByEmail(profile.email);
+    if (!byEmail) {
+      return null;
+    }
+    if (!byEmail.oauthProvider) {
+      byEmail.oauthProvider = profile.provider;
+      byEmail.oauthId = profile.providerId;
+      return this.usersRepository.Save(byEmail);
+    }
+    return byEmail;
+  }
+
+  async CreateOAuthUser(profile: OAuthProfile, role: UserRole): Promise<User> {
+    const passwordHash = await this.passwordHasher.Hash(
+      randomBytes(32).toString('hex'),
+    );
+    return this.usersRepository.Create({
+      email: profile.email,
+      passwordHash,
+      fullName: profile.fullName,
+      phone: null,
+      role,
+      oauthProvider: profile.provider,
+      oauthId: profile.providerId,
+    });
   }
 
   async Update(id: string, input: UpdateUserInput): Promise<User> {

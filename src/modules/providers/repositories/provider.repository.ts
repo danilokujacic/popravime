@@ -40,12 +40,9 @@ export class ProviderRepository {
           search: filter.search ? `%${filter.search}%` : null,
         },
       )
-      .andWhere(
-        '(:verificationStatus::text IS NULL OR provider.verificationStatus = :verificationStatus::verification_status_enum)',
-        {
-          verificationStatus: filter.verificationStatus ?? null,
-        },
-      )
+      .andWhere('provider.verificationStatus = :verificationStatus', {
+        verificationStatus: VerificationStatus.Verified,
+      })
       .orderBy('provider.businessName', 'ASC')
       .skip((page - 1) * limit)
       .take(limit);
@@ -62,8 +59,17 @@ export class ProviderRepository {
     return this.repository.findOne({ where: { slug } });
   }
 
+  FindByOwnerId(ownerUserId: string): Promise<Provider | null> {
+    return this.repository.findOne({ where: { ownerUserId } });
+  }
+
   async SlugExists(slug: string): Promise<boolean> {
     const count = await this.repository.count({ where: { slug } });
+    return count > 0;
+  }
+
+  async ExistsForOwner(ownerUserId: string): Promise<boolean> {
+    const count = await this.repository.count({ where: { ownerUserId } });
     return count > 0;
   }
 

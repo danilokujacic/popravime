@@ -12,6 +12,7 @@ import { redisConfig } from '../../../config/redis.config';
           host: config.host,
           port: config.port,
           password: config.password,
+          maxRetriesPerRequest: null,
         },
       }),
     }),

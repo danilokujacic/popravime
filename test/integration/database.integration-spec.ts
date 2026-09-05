@@ -8,6 +8,9 @@ import { City } from '../../src/modules/cities/entities/city.entity';
 import { Category } from '../../src/modules/categories/entities/category.entity';
 import { User } from '../../src/modules/users/entities/user.entity';
 import { Provider } from '../../src/modules/providers/entities/provider.entity';
+import { ProviderRepository } from '../../src/modules/providers/repositories/provider.repository';
+import { ProviderCategoryRepository } from '../../src/modules/providers/repositories/provider-category.repository';
+import { ProviderCategory } from '../../src/modules/providers/entities/provider-category.entity';
 import { RepairRequest } from '../../src/modules/repair-requests/entities/repair-request.entity';
 import { Offer } from '../../src/modules/offers/entities/offer.entity';
 import { UserRole } from '../../src/modules/users/users.types';
@@ -42,7 +45,7 @@ describe('Database integration', () => {
     );
 
     await dataSource.initialize();
-    await dataSource.runMigrations();
+    await dataSource.runMigrations({ transaction: 'each' });
   });
 
   afterAll(async () => {
@@ -270,6 +273,190 @@ describe('Database integration', () => {
       dataSource.query(
         `INSERT INTO "messages" ("sender_id", "body") VALUES ($1, $2)`,
         [customer.id, 'neither set, should fail'],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('only lists verified providers through the public directory', async () => {
+    const cityRepo = dataSource.getRepository(City);
+    const userRepo = dataSource.getRepository(User);
+    const providerRepo = dataSource.getRepository(Provider);
+    const providerRepository = new ProviderRepository(providerRepo);
+
+    const city = await cityRepo.save(
+      cityRepo.create({ name: 'Bar', slug: 'bar-it3', region: 'Coastal' }),
+    );
+
+    async function CreateOwnerWithProvider(
+      email: string,
+      businessName: string,
+      slug: string,
+      verificationStatus: VerificationStatus,
+    ): Promise<void> {
+      const owner = await userRepo.save(
+        userRepo.create({
+          email,
+          passwordHash: 'hash',
+          fullName: businessName,
+          role: UserRole.ProviderOwner,
+        }),
+      );
+      await providerRepo.save(
+        providerRepo.create({
+          ownerUserId: owner.id,
+          businessName,
+          slug,
+          address: 'Address',
+          cityId: city.id,
+          verificationStatus,
+        }),
+      );
+    }
+
+    await CreateOwnerWithProvider(
+      'pending-owner-it3@popravime.me',
+      'Pending Repair',
+      'pending-repair-it3',
+      VerificationStatus.Pending,
+    );
+    await CreateOwnerWithProvider(
+      'verified-owner-it3@popravime.me',
+      'Verified Repair',
+      'verified-repair-it3',
+      VerificationStatus.Verified,
+    );
+    await CreateOwnerWithProvider(
+      'rejected-owner-it3@popravime.me',
+      'Rejected Repair',
+      'rejected-repair-it3',
+      VerificationStatus.Rejected,
+    );
+
+    const result = await providerRepository.List({ cityId: city.id }, 1, 10);
+
+    expect(result.items.map((item) => item.businessName)).toEqual([
+      'Verified Repair',
+    ]);
+  });
+
+  it('only counts a provider owner’s verified providers toward their serviced categories', async () => {
+    const cityRepo = dataSource.getRepository(City);
+    const categoryRepo = dataSource.getRepository(Category);
+    const userRepo = dataSource.getRepository(User);
+    const providerRepo = dataSource.getRepository(Provider);
+    const providerCategoryRepo = dataSource.getRepository(ProviderCategory);
+    const providerCategoryRepository = new ProviderCategoryRepository(
+      providerCategoryRepo,
+    );
+
+    const city = await cityRepo.save(
+      cityRepo.create({ name: 'Ulcinj', slug: 'ulcinj-it4', region: 'Coastal' }),
+    );
+    const pendingCategory = await categoryRepo.save(
+      categoryRepo.create({ name: 'TVs', slug: 'tvs-it4' }),
+    );
+    const verifiedCategory = await categoryRepo.save(
+      categoryRepo.create({ name: 'Washing machines', slug: 'washers-it4' }),
+    );
+
+    const soleOwnerPending = await userRepo.save(
+      userRepo.create({
+        email: 'sole-pending-owner-it4@popravime.me',
+        passwordHash: 'hash',
+        fullName: 'Sole Pending Owner',
+        role: UserRole.ProviderOwner,
+      }),
+    );
+    const solePendingProvider = await providerRepo.save(
+      providerRepo.create({
+        ownerUserId: soleOwnerPending.id,
+        businessName: 'Sole Pending Repair',
+        slug: 'sole-pending-repair-it4',
+        address: 'Address',
+        cityId: city.id,
+        verificationStatus: VerificationStatus.Pending,
+      }),
+    );
+    await providerCategoryRepo.save(
+      providerCategoryRepo.create({
+        providerId: solePendingProvider.id,
+        categoryId: pendingCategory.id,
+      }),
+    );
+
+    const soleOwnerVerified = await userRepo.save(
+      userRepo.create({
+        email: 'sole-verified-owner-it4@popravime.me',
+        passwordHash: 'hash',
+        fullName: 'Sole Verified Owner',
+        role: UserRole.ProviderOwner,
+      }),
+    );
+    const soleVerifiedProvider = await providerRepo.save(
+      providerRepo.create({
+        ownerUserId: soleOwnerVerified.id,
+        businessName: 'Sole Verified Repair',
+        slug: 'sole-verified-repair-it4',
+        address: 'Address',
+        cityId: city.id,
+        verificationStatus: VerificationStatus.Verified,
+      }),
+    );
+    await providerCategoryRepo.save(
+      providerCategoryRepo.create({
+        providerId: soleVerifiedProvider.id,
+        categoryId: verifiedCategory.id,
+      }),
+    );
+
+    const solePendingCategories =
+      await providerCategoryRepository.ListCategoryIdsForOwner(
+        soleOwnerPending.id,
+      );
+    expect(solePendingCategories).toEqual([]);
+
+    const soleVerifiedCategories =
+      await providerCategoryRepository.ListCategoryIdsForOwner(
+        soleOwnerVerified.id,
+      );
+    expect(soleVerifiedCategories).toEqual([verifiedCategory.id]);
+  });
+
+  it('rejects creating a second provider for an owner who already has one', async () => {
+    const cityRepo = dataSource.getRepository(City);
+    const userRepo = dataSource.getRepository(User);
+    const providerRepo = dataSource.getRepository(Provider);
+
+    const city = await cityRepo.save(
+      cityRepo.create({ name: 'Herceg Novi', slug: 'hn-it5', region: 'Coastal' }),
+    );
+    const owner = await userRepo.save(
+      userRepo.create({
+        email: 'one-provider-owner-it5@popravime.me',
+        passwordHash: 'hash',
+        fullName: 'One Provider Owner',
+        role: UserRole.ProviderOwner,
+      }),
+    );
+    await providerRepo.save(
+      providerRepo.create({
+        ownerUserId: owner.id,
+        businessName: 'First Repair',
+        slug: 'first-repair-it5',
+        address: 'Address',
+        cityId: city.id,
+      }),
+    );
+
+    await expect(
+      providerRepo.save(
+        providerRepo.create({
+          ownerUserId: owner.id,
+          businessName: 'Second Repair',
+          slug: 'second-repair-it5',
+          address: 'Address',
+          cityId: city.id,
+        }),
       ),
     ).rejects.toThrow();
   });

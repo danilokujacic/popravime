@@ -1,7 +1,11 @@
-onlyBuiltDependencies:
-  - bcrypt
-  - msgpackr-extract
-  - protobufjs
+overrides:
+  qs: '>=6.16.0'
 
-ignoredBuiltDependencies:
-  - '@scarf/scarf'
+allowBuilds:
+  '@scarf/scarf': false
+  bcrypt: true
+  cpu-features: false
+  msgpackr-extract: false
+  protobufjs: false
+  ssh2: false
+  unrs-resolver: false

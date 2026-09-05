@@ -4,6 +4,11 @@ export enum UserRole {
   Admin = 'admin',
 }
 
+export enum OAuthProvider {
+  Google = 'google',
+  Facebook = 'facebook',
+}
+
 export interface CreateUserInput {
   email: string;
   password: string;
@@ -22,4 +27,11 @@ export interface UserCredentials {
   email: string;
   passwordHash: string;
   role: UserRole;
+}
+
+export interface OAuthProfile {
+  provider: OAuthProvider;
+  providerId: string;
+  email: string;
+  fullName: string;
 }

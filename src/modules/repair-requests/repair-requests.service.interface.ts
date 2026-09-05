@@ -8,10 +8,7 @@ import { PaginatedResult } from '../../common/interfaces/paginated-result.interf
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 
 export interface IRepairRequestsService {
-  Create(
-    customerId: string,
-    input: CreateRepairRequestInput,
-  ): Promise<RepairRequest>;
+  Create(input: CreateRepairRequestInput): Promise<RepairRequest>;
   FindById(id: string): Promise<RepairRequest>;
   FindByIdForViewer(
     id: string,
@@ -32,6 +29,16 @@ export interface IRepairRequestsService {
     id: string,
     offerId: string,
     customerId: string,
+  ): Promise<RepairRequest>;
+  Approve(
+    id: string,
+    adminId: string,
+    reviewNotes?: string,
+  ): Promise<RepairRequest>;
+  Reject(
+    id: string,
+    adminId: string,
+    reviewNotes?: string,
   ): Promise<RepairRequest>;
   CountByStatus(): Promise<Record<RequestStatus, number>>;
 }

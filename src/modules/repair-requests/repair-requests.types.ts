@@ -4,12 +4,14 @@ export enum Urgency {
 }
 
 export enum RequestStatus {
+  PendingReview = 'pending_review',
   Open = 'open',
   OffersReceived = 'offers_received',
   Accepted = 'accepted',
   InProgress = 'in_progress',
   Completed = 'completed',
   Cancelled = 'cancelled',
+  Rejected = 'rejected',
 }
 
 export interface RepairRequestPhotoInput {
@@ -19,6 +21,7 @@ export interface RepairRequestPhotoInput {
 }
 
 export interface CreateRepairRequestInput {
+  customerId: string;
   categoryId: string;
   brand?: string;
   model?: string;
@@ -30,8 +33,10 @@ export interface CreateRepairRequestInput {
 
 export interface ListRepairRequestsFilter {
   status?: RequestStatus;
+  excludedStatuses?: RequestStatus[];
   cityId?: string;
   categoryId?: string;
+  categoryIds?: string[];
   customerId?: string;
   urgency?: Urgency;
 }

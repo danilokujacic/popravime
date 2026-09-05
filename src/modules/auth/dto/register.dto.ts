@@ -8,9 +8,13 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { MatchesField } from '../../../common/validators/matches-field.decorator';
 import { UserRole } from '../../users/users.types';
 
-const REGISTERABLE_ROLES = [UserRole.Customer, UserRole.ProviderOwner] as const;
+export const REGISTERABLE_ROLES = [
+  UserRole.Customer,
+  UserRole.ProviderOwner,
+] as const;
 
 export class RegisterDto {
   @IsEmail()
@@ -20,6 +24,11 @@ export class RegisterDto {
   @MinLength(8)
   @MaxLength(72)
   password: string;
+
+  @IsString()
+  @MatchesField('password')
+  @Expose({ name: 'repeat_password' })
+  repeatPassword: string;
 
   @IsString()
   @MinLength(2)

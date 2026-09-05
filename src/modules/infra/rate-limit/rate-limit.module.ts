@@ -26,6 +26,8 @@ import { throttleConfig } from '../../../config/throttle.config';
             host: redis.host,
             port: redis.port,
             password: redis.password,
+            connectTimeout: 5000,
+            maxRetriesPerRequest: 1,
           }),
         ),
       }),

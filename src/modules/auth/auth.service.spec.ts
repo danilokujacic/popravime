@@ -1,7 +1,7 @@
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { PasswordHasher } from '../../shared/password/password-hasher';
-import { UserRole } from '../users/users.types';
+import { OAuthProvider, UserRole } from '../users/users.types';
 import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 import { DomainUnauthorizedException } from '../../common/exceptions/unauthorized.exception';
 
@@ -14,6 +14,8 @@ function BuildService(overrides?: {
     FindByEmail: jest.fn().mockResolvedValue(null),
     Register: jest.fn(),
     FindCredentials: jest.fn(),
+    FindOAuthMatch: jest.fn(),
+    CreateOAuthUser: jest.fn(),
     ...overrides?.usersService,
   } as unknown as UsersService;
 
@@ -171,6 +173,98 @@ describe('AuthService', () => {
         accessToken: 'signed-token',
         refreshToken: 'signed-token',
       });
+    });
+  });
+
+  describe('TryOAuthLogin', () => {
+    const profile = {
+      provider: OAuthProvider.Google,
+      providerId: 'google-123',
+      email: 'ana@popravime.me',
+      fullName: 'Ana Petrović',
+    };
+
+    it('issues a token pair for a matched user', async () => {
+      const { service, usersService } = BuildService({
+        usersService: {
+          FindOAuthMatch: jest.fn().mockResolvedValue({
+            id: 'user-1',
+            email: 'ana@popravime.me',
+            role: UserRole.Customer,
+          }),
+        },
+      });
+
+      const result = await service.TryOAuthLogin(profile);
+
+      expect(usersService.FindOAuthMatch).toHaveBeenCalled();
+      expect(result).toEqual({
+        accessToken: 'signed-token',
+        refreshToken: 'signed-token',
+      });
+    });
+
+    it('returns null when no account matches, without creating one', async () => {
+      const { service, usersService } = BuildService({
+        usersService: { FindOAuthMatch: jest.fn().mockResolvedValue(null) },
+      });
+
+      const result = await service.TryOAuthLogin(profile);
+
+      expect(usersService.CreateOAuthUser).not.toHaveBeenCalled();
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('CompleteOAuthSignup', () => {
+    const profile = {
+      provider: OAuthProvider.Google,
+      providerId: 'google-123',
+      email: 'ana@popravime.me',
+      fullName: 'Ana Petrović',
+    };
+
+    it('creates the account with the chosen role when nothing matches yet', async () => {
+      const { service, usersService } = BuildService({
+        usersService: {
+          FindOAuthMatch: jest.fn().mockResolvedValue(null),
+          CreateOAuthUser: jest.fn().mockResolvedValue({
+            id: 'user-1',
+            email: 'ana@popravime.me',
+            role: UserRole.ProviderOwner,
+          }),
+        },
+      });
+
+      const result = await service.CompleteOAuthSignup(
+        profile,
+        UserRole.ProviderOwner,
+      );
+
+      expect(usersService.CreateOAuthUser).toHaveBeenCalledWith(
+        profile,
+        UserRole.ProviderOwner,
+      );
+      expect(result).toEqual({
+        accessToken: 'signed-token',
+        refreshToken: 'signed-token',
+      });
+    });
+
+    it('logs into an account that matched in the meantime instead of creating a duplicate', async () => {
+      const { service, usersService } = BuildService({
+        usersService: {
+          FindOAuthMatch: jest.fn().mockResolvedValue({
+            id: 'user-1',
+            email: 'ana@popravime.me',
+            role: UserRole.Customer,
+          }),
+        },
+      });
+
+      await service.CompleteOAuthSignup(profile, UserRole.ProviderOwner);
+
+      expect(usersService.CreateOAuthUser).not.toHaveBeenCalled();
     });
   });
 

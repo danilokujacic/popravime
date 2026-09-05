@@ -10,6 +10,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { BuildDataSourceOptions } from '../../src/database/data-source-options';
 import { AppModule } from '../../src/app.module';
+import { AUTH_THROTTLE } from '../../src/modules/infra/rate-limit/rate-limit.constants';
 
 jest.setTimeout(180000);
 
@@ -48,8 +49,6 @@ describe('Auth flow integration', () => {
     process.env.EMAIL_HOST = 'localhost';
     process.env.EMAIL_PORT = '1025';
     process.env.GEOCODING_USER_AGENT = 'popravime-integration-test/1.0';
-    process.env.THROTTLE_AUTH_LIMIT = '3';
-    process.env.THROTTLE_AUTH_TTL_MS = '60000';
 
     const migrationDataSource = new DataSource(
       BuildDataSourceOptions({
@@ -61,7 +60,7 @@ describe('Auth flow integration', () => {
       }),
     );
     await migrationDataSource.initialize();
-    await migrationDataSource.runMigrations();
+    await migrationDataSource.runMigrations({ transaction: 'each' });
     await migrationDataSource.destroy();
 
     const moduleFixture = await Test.createTestingModule({
@@ -92,6 +91,7 @@ describe('Auth flow integration', () => {
       .send({
         email: 'flow@popravime.me',
         password: 'password123',
+        repeat_password: 'password123',
         full_name: 'Flow Tester',
         role: 'customer',
       })
@@ -135,7 +135,7 @@ describe('Auth flow integration', () => {
         .post('/auth/login')
         .send({ email: 'flow@popravime.me', password: 'wrong-password' });
 
-    const limit = Number(process.env.THROTTLE_AUTH_LIMIT ?? 3);
+    const limit = AUTH_THROTTLE.default.limit;
     for (let index = 0; index < limit; index += 1) {
       await attempt();
     }

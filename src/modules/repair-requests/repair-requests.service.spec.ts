@@ -2,11 +2,13 @@ import { RepairRequestsService } from './repair-requests.service';
 import { RepairRequestsRepository } from './repair-requests.repository';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { RepairRequest } from './entities/repair-request.entity';
 import { RequestStatus, Urgency } from './repair-requests.types';
 import { UserRole } from '../users/users.types';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
+import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 import type { StorageService } from '../infra/storage/storage.service.interface';
 
 function BuildRequest(overrides?: Partial<RepairRequest>): RepairRequest {
@@ -30,33 +32,53 @@ function BuildViewer(
   };
 }
 
+function BuildService(request: RepairRequest) {
+  const repairRequestsRepository = {
+    FindById: jest.fn().mockResolvedValue(request),
+    Create: jest.fn().mockResolvedValue(request),
+    Save: jest.fn().mockImplementation((entity: RepairRequest) => entity),
+    TryAccept: jest.fn().mockResolvedValue(true),
+  } as unknown as RepairRequestsRepository;
+
+  const storageService = { Upload: jest.fn() } as unknown as StorageService;
+  const usersService = {
+    FindById: jest.fn().mockResolvedValue({
+      id: 'customer-1',
+      email: 'customer@popravime.me',
+      fullName: 'A Customer',
+    }),
+  } as unknown as UsersService;
+  const notificationsService = {
+    Notify: jest.fn(),
+  } as unknown as NotificationsService;
+  const auditLogsService = { Log: jest.fn() } as unknown as AuditLogsService;
+
+  const logger = {
+    info: jest.fn(),
+    warn: jest.fn(),
+  } as unknown as ConstructorParameters<typeof RepairRequestsService>[5];
+
+  const service = new RepairRequestsService(
+    repairRequestsRepository,
+    storageService,
+    usersService,
+    notificationsService,
+    auditLogsService,
+    logger,
+  );
+
+  return {
+    service,
+    repairRequestsRepository,
+    notificationsService,
+    auditLogsService,
+  };
+}
+
 describe('RepairRequestsService.FindByIdForViewer', () => {
-  function BuildService(request: RepairRequest) {
-    const repairRequestsRepository = {
-      FindById: jest.fn().mockResolvedValue(request),
-    } as unknown as RepairRequestsRepository;
-
-    const storageService = {} as StorageService;
-    const usersService = {} as UsersService;
-    const notificationsService = {} as NotificationsService;
-
-    const logger = {
-      info: jest.fn(),
-      warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof RepairRequestsService>[4];
-
-    return new RepairRequestsService(
-      repairRequestsRepository,
-      storageService,
-      usersService,
-      notificationsService,
-      logger,
-    );
-  }
-
   it('lets a customer view their own request', async () => {
     const request = BuildRequest();
-    const service = BuildService(request);
+    const { service } = BuildService(request);
 
     const result = await service.FindByIdForViewer(
       'request-1',
@@ -68,16 +90,16 @@ describe('RepairRequestsService.FindByIdForViewer', () => {
 
   it("rejects a customer viewing someone else's request", async () => {
     const request = BuildRequest({ customerId: 'customer-1' });
-    const service = BuildService(request);
+    const { service } = BuildService(request);
 
     await expect(
       service.FindByIdForViewer('request-1', BuildViewer({ id: 'customer-2' })),
     ).rejects.toBeInstanceOf(DomainForbiddenException);
   });
 
-  it('lets a provider owner view any request', async () => {
+  it('lets a provider owner view an approved request', async () => {
     const request = BuildRequest({ customerId: 'customer-1' });
-    const service = BuildService(request);
+    const { service } = BuildService(request);
 
     const result = await service.FindByIdForViewer(
       'request-1',
@@ -87,9 +109,27 @@ describe('RepairRequestsService.FindByIdForViewer', () => {
     expect(result.id).toBe('request-1');
   });
 
-  it('lets an admin view any request', async () => {
-    const request = BuildRequest({ customerId: 'customer-1' });
-    const service = BuildService(request);
+  it('rejects a provider owner viewing a request still pending moderation', async () => {
+    const request = BuildRequest({
+      customerId: 'customer-1',
+      status: RequestStatus.PendingReview,
+    });
+    const { service } = BuildService(request);
+
+    await expect(
+      service.FindByIdForViewer(
+        'request-1',
+        BuildViewer({ id: 'provider-owner-1', role: UserRole.ProviderOwner }),
+      ),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+  });
+
+  it('lets an admin view any request regardless of moderation status', async () => {
+    const request = BuildRequest({
+      customerId: 'customer-1',
+      status: RequestStatus.PendingReview,
+    });
+    const { service } = BuildService(request);
 
     const result = await service.FindByIdForViewer(
       'request-1',
@@ -97,5 +137,165 @@ describe('RepairRequestsService.FindByIdForViewer', () => {
     );
 
     expect(result.id).toBe('request-1');
+  });
+
+  it('lets a provider owner view a request inside their serviced categories', async () => {
+    const request = BuildRequest({
+      customerId: 'customer-1',
+      categoryId: 'category-plumbing',
+    });
+    const { service } = BuildService(request);
+
+    const result = await service.FindByIdForViewer(
+      'request-1',
+      BuildViewer({ id: 'provider-owner-1', role: UserRole.ProviderOwner }),
+      ['category-plumbing', 'category-electrics'],
+    );
+
+    expect(result.id).toBe('request-1');
+  });
+
+  it('rejects a provider owner viewing a request outside their serviced categories', async () => {
+    const request = BuildRequest({
+      customerId: 'customer-1',
+      categoryId: 'category-electronics',
+    });
+    const { service } = BuildService(request);
+
+    await expect(
+      service.FindByIdForViewer(
+        'request-1',
+        BuildViewer({ id: 'provider-owner-1', role: UserRole.ProviderOwner }),
+        ['category-plumbing'],
+      ),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+  });
+
+  it('rejects a provider owner with no verified provider (no serviced categories)', async () => {
+    const request = BuildRequest({
+      customerId: 'customer-1',
+      categoryId: 'category-plumbing',
+    });
+    const { service } = BuildService(request);
+
+    await expect(
+      service.FindByIdForViewer(
+        'request-1',
+        BuildViewer({ id: 'provider-owner-1', role: UserRole.ProviderOwner }),
+        [],
+      ),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+  });
+});
+
+describe('RepairRequestsService.Create', () => {
+  it('creates the request for the given customer', async () => {
+    const { service, repairRequestsRepository } = BuildService(BuildRequest());
+
+    await service.Create({
+      customerId: 'customer-1',
+      categoryId: 'category-1',
+      description: 'The screen is cracked and unresponsive',
+      cityId: 'city-1',
+      urgency: Urgency.Standard,
+    });
+
+    expect(repairRequestsRepository.Create).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId: 'customer-1' }),
+    );
+  });
+});
+
+describe('RepairRequestsService.Approve / Reject', () => {
+  it('moves a pending request to open and audit-logs the decision', async () => {
+    const request = BuildRequest({ status: RequestStatus.PendingReview });
+    const { service, auditLogsService } = BuildService(request);
+
+    const result = await service.Approve('request-1', 'admin-1');
+
+    expect(result.status).toBe(RequestStatus.Open);
+    expect(auditLogsService.Log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'admin-1',
+        action: 'repair_request.open',
+      }),
+    );
+  });
+
+  it('moves a pending request to rejected', async () => {
+    const request = BuildRequest({ status: RequestStatus.PendingReview });
+    const { service } = BuildService(request);
+
+    const result = await service.Reject(
+      'request-1',
+      'admin-1',
+      'duplicate report',
+    );
+
+    expect(result.status).toBe(RequestStatus.Rejected);
+  });
+
+  it('rejects reviewing a request that already left pending_review', async () => {
+    const request = BuildRequest({ status: RequestStatus.Open });
+    const { service } = BuildService(request);
+
+    await expect(
+      service.Approve('request-1', 'admin-1'),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+  });
+
+  it('notifies the customer of the moderation decision', async () => {
+    const request = BuildRequest({ status: RequestStatus.PendingReview });
+    const { service, notificationsService } = BuildService(request);
+
+    await service.Approve('request-1', 'admin-1');
+
+    expect(notificationsService.Notify).toHaveBeenCalled();
+  });
+});
+
+describe('RepairRequestsService.AcceptOffer', () => {
+  it('accepts the offer via an atomic conditional transition', async () => {
+    const request = BuildRequest({ status: RequestStatus.OffersReceived });
+    const { service, repairRequestsRepository } = BuildService(request);
+
+    const result = await service.AcceptOffer(
+      'request-1',
+      'offer-1',
+      'customer-1',
+    );
+
+    expect(result.status).toBe(RequestStatus.Accepted);
+    expect(result.acceptedOfferId).toBe('offer-1');
+    expect(repairRequestsRepository.TryAccept).toHaveBeenCalledWith(
+      'request-1',
+      'offer-1',
+      [RequestStatus.OffersReceived],
+    );
+    expect(repairRequestsRepository.Save).not.toHaveBeenCalled();
+  });
+
+  it('throws a conflict without saving when another offer won the race', async () => {
+    const request = BuildRequest({ status: RequestStatus.OffersReceived });
+    const { service, repairRequestsRepository } = BuildService(request);
+    (repairRequestsRepository.TryAccept as jest.Mock).mockResolvedValue(false);
+
+    await expect(
+      service.AcceptOffer('request-1', 'offer-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(repairRequestsRepository.Save).not.toHaveBeenCalled();
+  });
+
+  it('rejects a customer who does not own the request before touching the database', async () => {
+    const request = BuildRequest({
+      customerId: 'someone-else',
+      status: RequestStatus.OffersReceived,
+    });
+    const { service, repairRequestsRepository } = BuildService(request);
+
+    await expect(
+      service.AcceptOffer('request-1', 'offer-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+    expect(repairRequestsRepository.TryAccept).not.toHaveBeenCalled();
   });
 });

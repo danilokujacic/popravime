@@ -16,6 +16,8 @@ export class S3StorageService implements StorageService {
       endpoint: config.endpoint,
       region: config.region,
       forcePathStyle: config.forcePathStyle,
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
       credentials: {
         accessKeyId: config.accessKey,
         secretAccessKey: config.secretKey,

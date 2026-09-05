@@ -33,4 +33,5 @@ export interface IProvidersService {
     input: UpdateVerificationStatusInput,
   ): Promise<Provider>;
   CountByVerificationStatus(): Promise<Record<VerificationStatus, number>>;
+  FindCategoryIdsForOwner(ownerUserId: string): Promise<string[]>;
 }

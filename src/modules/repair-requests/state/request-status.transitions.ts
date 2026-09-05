@@ -1,6 +1,7 @@
 import { RequestStatus } from '../repair-requests.types';
 
 const ALLOWED_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
+  [RequestStatus.PendingReview]: [],
   [RequestStatus.Open]: [RequestStatus.OffersReceived, RequestStatus.Cancelled],
   [RequestStatus.OffersReceived]: [
     RequestStatus.Accepted,
@@ -13,6 +14,7 @@ const ALLOWED_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
   ],
   [RequestStatus.Completed]: [],
   [RequestStatus.Cancelled]: [],
+  [RequestStatus.Rejected]: [],
 };
 
 export class RequestStatusTransitions {

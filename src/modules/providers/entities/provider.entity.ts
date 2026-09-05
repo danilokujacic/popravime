@@ -18,8 +18,7 @@ export class Provider {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'owner_user_id', type: 'uuid' })
-  @Index()
+  @Column({ name: 'owner_user_id', type: 'uuid', unique: true })
   ownerUserId: string;
 
   @ManyToOne(() => User)

@@ -13,6 +13,10 @@ function IsConvertibleObject(value: unknown): value is Record<string, unknown> {
 }
 
 export class CaseMapper {
+  static KeyToSnakeCase(key: string): string {
+    return CamelToSnake(key);
+  }
+
   static ToSnakeCase(value: unknown): unknown {
     if (Array.isArray(value)) {
       return value.map((item) => CaseMapper.ToSnakeCase(item));

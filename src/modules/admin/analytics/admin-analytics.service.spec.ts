@@ -28,12 +28,14 @@ describe('AdminAnalyticsService.Overview', () => {
 
     const repairRequestsService = {
       CountByStatus: jest.fn().mockResolvedValue({
+        [RequestStatus.PendingReview]: 1,
         [RequestStatus.Open]: 3,
         [RequestStatus.OffersReceived]: 1,
         [RequestStatus.Accepted]: 0,
         [RequestStatus.InProgress]: 2,
         [RequestStatus.Completed]: 4,
         [RequestStatus.Cancelled]: 0,
+        [RequestStatus.Rejected]: 0,
       }),
     } as unknown as RepairRequestsService;
 

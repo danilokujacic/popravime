@@ -6,7 +6,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { UsersService } from '../users/users.service';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { jwtConfig } from '../../config/jwt.config';
-import { CreateUserInput, UserRole } from '../users/users.types';
+import { CreateUserInput, OAuthProfile, UserRole } from '../users/users.types';
 import { LoginInput } from './auth.types';
 import { TokenPair } from './interfaces/token-pair.interface';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -95,6 +95,32 @@ export class AuthService implements IAuthService {
 
   Refresh(user: AuthenticatedUser): Promise<TokenPair> {
     this.logger.info({ userId: user.id }, 'Access token refreshed');
+    return this.IssueTokens(user.id, user.email, user.role);
+  }
+
+  async TryOAuthLogin(profile: OAuthProfile): Promise<TokenPair | null> {
+    const user = await this.usersService.FindOAuthMatch(profile);
+    if (!user) {
+      return null;
+    }
+    this.logger.info(
+      { userId: user.id, provider: profile.provider },
+      'User logged in via OAuth',
+    );
+    return this.IssueTokens(user.id, user.email, user.role);
+  }
+
+  async CompleteOAuthSignup(
+    profile: OAuthProfile,
+    role: UserRole,
+  ): Promise<TokenPair> {
+    const existing = await this.usersService.FindOAuthMatch(profile);
+    const user =
+      existing ?? (await this.usersService.CreateOAuthUser(profile, role));
+    this.logger.info(
+      { userId: user.id, provider: profile.provider, role: user.role },
+      existing ? 'User logged in via OAuth' : 'User signed up via OAuth',
+    );
     return this.IssueTokens(user.id, user.email, user.role);
   }
 

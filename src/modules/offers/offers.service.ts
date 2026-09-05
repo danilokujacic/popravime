@@ -5,6 +5,7 @@ import { OffersRepository } from './offers.repository';
 import { Offer } from './entities/offer.entity';
 import { OfferStatus } from './offers.types';
 import type { CreateOfferInput, ListOffersFilter } from './offers.types';
+import { VerificationStatus } from '../providers/providers.types';
 import { RequestStatus } from '../repair-requests/repair-requests.types';
 import { IOffersService } from './offers.service.interface';
 import { OfferStatusTransitions } from './state/offer-status.transitions';
@@ -37,6 +38,7 @@ export class OffersService implements IOffersService {
   ): Promise<Offer> {
     const provider = await this.providersService.FindById(input.providerId);
     this.EnsureProviderOwnership(provider.ownerUserId, providerOwnerId);
+    this.EnsureProviderVerified(provider.verificationStatus);
 
     const request = await this.repairRequestsService.FindById(input.requestId);
     this.EnsureAcceptingOffers(request.status);
@@ -214,6 +216,17 @@ export class OffersService implements IOffersService {
       throw new DomainForbiddenException(
         'PROVIDER_NOT_OWNED',
         'You do not own this provider profile',
+      );
+    }
+  }
+
+  private EnsureProviderVerified(
+    verificationStatus: VerificationStatus,
+  ): void {
+    if (verificationStatus !== VerificationStatus.Verified) {
+      throw new DomainForbiddenException(
+        'PROVIDER_NOT_VERIFIED',
+        'Your provider profile must be verified before submitting offers',
       );
     }
   }

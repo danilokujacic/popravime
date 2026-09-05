@@ -88,4 +88,13 @@ describe('RequestStatusTransitions', () => {
       ),
     ).toBe(false);
   });
+
+  it('rejects a customer moving their own request out of pending_review', () => {
+    expect(
+      RequestStatusTransitions.CanTransition(
+        RequestStatus.PendingReview,
+        RequestStatus.Open,
+      ),
+    ).toBe(false);
+  });
 });

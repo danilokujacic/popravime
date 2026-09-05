@@ -1,14 +1,18 @@
 import { Expose, Type } from 'class-transformer';
 import {
   IsEmail,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   IsUrl,
   MaxLength,
   MinLength,
+  Validate,
   ValidateNested,
 } from 'class-validator';
 import { WorkingHoursDto } from './working-hours.dto';
+import { PairedCoordinatesConstraint } from './paired-coordinates.validator';
 
 export class UpdateProviderDto {
   @IsOptional()
@@ -28,6 +32,16 @@ export class UpdateProviderDto {
   @MinLength(2)
   @MaxLength(255)
   address?: string;
+
+  @IsOptional()
+  @IsLatitude()
+  @Validate(PairedCoordinatesConstraint)
+  latitude?: string;
+
+  @IsOptional()
+  @IsLongitude()
+  @Validate(PairedCoordinatesConstraint)
+  longitude?: string;
 
   @IsOptional()
   @IsString()

@@ -1,0 +1,277 @@
+import { ProvidersService } from './providers.service';
+import { ProviderRepository } from './repositories/provider.repository';
+import { ProviderCategoryRepository } from './repositories/provider-category.repository';
+import { CitiesService } from '../cities/cities.service';
+import type { IGeocodingService } from './geocoding/geocoding.service.interface';
+import { Provider } from './entities/provider.entity';
+import { City } from '../cities/entities/city.entity';
+import { DomainConflictException } from '../../common/exceptions/conflict.exception';
+
+function BuildService(categoryIds: string[]) {
+  const providerRepository = {} as unknown as ProviderRepository;
+  const providerCategoryRepository = {
+    ListCategoryIdsForOwner: jest.fn().mockResolvedValue(categoryIds),
+  } as unknown as ProviderCategoryRepository;
+  const citiesService = {} as unknown as CitiesService;
+  const geocodingService = {} as unknown as IGeocodingService;
+  const logger = {
+    info: jest.fn(),
+    warn: jest.fn(),
+  } as unknown as ConstructorParameters<typeof ProvidersService>[4];
+
+  const service = new ProvidersService(
+    providerRepository,
+    providerCategoryRepository,
+    citiesService,
+    geocodingService,
+    logger,
+  );
+
+  return { service, providerCategoryRepository };
+}
+
+describe('ProvidersService.FindCategoryIdsForOwner', () => {
+  it('returns the category ids serviced by the owner’s provider profiles', async () => {
+    const { service, providerCategoryRepository } = BuildService([
+      'category-plumbing',
+      'category-electrics',
+    ]);
+
+    const result = await service.FindCategoryIdsForOwner('provider-owner-1');
+
+    expect(result).toEqual(['category-plumbing', 'category-electrics']);
+    expect(
+      providerCategoryRepository.ListCategoryIdsForOwner,
+    ).toHaveBeenCalledWith('provider-owner-1');
+  });
+
+  it('returns an empty list when the owner services no categories yet', async () => {
+    const { service } = BuildService([]);
+
+    const result = await service.FindCategoryIdsForOwner('provider-owner-1');
+
+    expect(result).toEqual([]);
+  });
+});
+
+function BuildCity(overrides?: Partial<City>): City {
+  return { id: 'city-1', name: 'Podgorica', ...overrides } as City;
+}
+
+describe('ProvidersService.Create', () => {
+  function BuildService() {
+    const providerRepository = {
+      ExistsForOwner: jest.fn().mockResolvedValue(false),
+      SlugExists: jest.fn().mockResolvedValue(false),
+      Create: jest
+        .fn()
+        .mockImplementation((value) =>
+          Promise.resolve({ id: 'provider-1', ...value }),
+        ),
+    } as unknown as ProviderRepository;
+    const providerCategoryRepository = {
+      ReplaceForProvider: jest.fn().mockResolvedValue(undefined),
+    } as unknown as ProviderCategoryRepository;
+    const citiesService = {
+      FindById: jest.fn().mockResolvedValue(BuildCity()),
+      IncrementProviderCount: jest.fn().mockResolvedValue(undefined),
+    } as unknown as CitiesService;
+    const geocodingService = {
+      Geocode: jest.fn(),
+    } as unknown as IGeocodingService;
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof ProvidersService>[4];
+
+    const service = new ProvidersService(
+      providerRepository,
+      providerCategoryRepository,
+      citiesService,
+      geocodingService,
+      logger,
+    );
+
+    return { service, providerRepository, geocodingService };
+  }
+
+  it('stores caller-supplied coordinates verbatim and skips geocoding', async () => {
+    const { service, providerRepository, geocodingService } = BuildService();
+
+    const provider = await service.Create('owner-1', {
+      businessName: 'Ana Repair',
+      address: 'Bulevar Svetog Petra Cetinjskog 1',
+      cityId: 'city-1',
+      latitude: '42.430400',
+      longitude: '19.259400',
+      categoryIds: ['category-1'],
+    });
+
+    expect(provider.latitude).toBe('42.430400');
+    expect(provider.longitude).toBe('19.259400');
+    expect(geocodingService.Geocode).not.toHaveBeenCalled();
+    expect(providerRepository.Create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        latitude: '42.430400',
+        longitude: '19.259400',
+      }),
+    );
+  });
+
+  it('falls back to geocoding the address when no coordinates are supplied', async () => {
+    const { service, providerRepository, geocodingService } = BuildService();
+    (geocodingService.Geocode as jest.Mock).mockResolvedValue({
+      latitude: '42.430400',
+      longitude: '19.259400',
+    });
+
+    const provider = await service.Create('owner-1', {
+      businessName: 'Ana Repair',
+      address: 'Bulevar Svetog Petra Cetinjskog 1',
+      cityId: 'city-1',
+      categoryIds: ['category-1'],
+    });
+
+    expect(geocodingService.Geocode).toHaveBeenCalledWith(
+      'Bulevar Svetog Petra Cetinjskog 1, Podgorica, Montenegro',
+    );
+    expect(provider.latitude).toBe('42.430400');
+    expect(provider.longitude).toBe('19.259400');
+    expect(providerRepository.Create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        latitude: '42.430400',
+        longitude: '19.259400',
+      }),
+    );
+  });
+
+  it('rejects creating a second provider for an owner who already has one', async () => {
+    const { service, providerRepository } = BuildService();
+    (providerRepository.ExistsForOwner as jest.Mock).mockResolvedValue(true);
+
+    await expect(
+      service.Create('owner-1', {
+        businessName: 'Ana Repair',
+        address: 'Bulevar Svetog Petra Cetinjskog 1',
+        cityId: 'city-1',
+        categoryIds: ['category-1'],
+      }),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(providerRepository.Create).not.toHaveBeenCalled();
+  });
+});
+
+function BuildExistingProvider(overrides?: Partial<Provider>): Provider {
+  return {
+    id: 'provider-1',
+    ownerUserId: 'owner-1',
+    businessName: 'Ana Repair',
+    slug: 'ana-repair',
+    address: 'Old address 1',
+    cityId: 'city-1',
+    latitude: '10.000000',
+    longitude: '20.000000',
+    ...overrides,
+  } as Provider;
+}
+
+describe('ProvidersService.Update', () => {
+  function BuildService(provider: Provider) {
+    const providerRepository = {
+      FindById: jest.fn().mockResolvedValue(provider),
+      Save: jest.fn().mockImplementation((value) => Promise.resolve(value)),
+    } as unknown as ProviderRepository;
+    const providerCategoryRepository = {} as unknown as ProviderCategoryRepository;
+    const citiesService = {
+      FindById: jest.fn().mockResolvedValue(BuildCity()),
+    } as unknown as CitiesService;
+    const geocodingService = {
+      Geocode: jest.fn(),
+    } as unknown as IGeocodingService;
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof ProvidersService>[4];
+
+    const service = new ProvidersService(
+      providerRepository,
+      providerCategoryRepository,
+      citiesService,
+      geocodingService,
+      logger,
+    );
+
+    return { service, citiesService, geocodingService };
+  }
+
+  it('updates only the coordinates, leaving the address and geocoding untouched', async () => {
+    const provider = BuildExistingProvider();
+    const { service, citiesService, geocodingService } =
+      BuildService(provider);
+
+    const saved = await service.Update('provider-1', 'owner-1', {
+      latitude: '11.000000',
+      longitude: '21.000000',
+    });
+
+    expect(saved.latitude).toBe('11.000000');
+    expect(saved.longitude).toBe('21.000000');
+    expect(saved.address).toBe('Old address 1');
+    expect(citiesService.FindById).not.toHaveBeenCalled();
+    expect(geocodingService.Geocode).not.toHaveBeenCalled();
+  });
+
+  it('stores explicit coordinates and skips geocoding even when the address also changes', async () => {
+    const provider = BuildExistingProvider();
+    const { service, citiesService, geocodingService } =
+      BuildService(provider);
+
+    const saved = await service.Update('provider-1', 'owner-1', {
+      address: 'New address 2',
+      latitude: '11.000000',
+      longitude: '21.000000',
+    });
+
+    expect(saved.address).toBe('New address 2');
+    expect(saved.latitude).toBe('11.000000');
+    expect(saved.longitude).toBe('21.000000');
+    expect(citiesService.FindById).not.toHaveBeenCalled();
+    expect(geocodingService.Geocode).not.toHaveBeenCalled();
+  });
+
+  it('falls back to geocoding the new address when no coordinates are supplied', async () => {
+    const provider = BuildExistingProvider();
+    const { service, citiesService, geocodingService } =
+      BuildService(provider);
+    (geocodingService.Geocode as jest.Mock).mockResolvedValue({
+      latitude: '33.000000',
+      longitude: '44.000000',
+    });
+
+    const saved = await service.Update('provider-1', 'owner-1', {
+      address: 'New address 2',
+    });
+
+    expect(citiesService.FindById).toHaveBeenCalledWith('city-1');
+    expect(geocodingService.Geocode).toHaveBeenCalledWith(
+      'New address 2, Podgorica, Montenegro',
+    );
+    expect(saved.latitude).toBe('33.000000');
+    expect(saved.longitude).toBe('44.000000');
+  });
+
+  it('leaves coordinates untouched when neither address nor coordinates are supplied', async () => {
+    const provider = BuildExistingProvider();
+    const { service, citiesService, geocodingService } =
+      BuildService(provider);
+
+    const saved = await service.Update('provider-1', 'owner-1', {
+      businessName: 'Renamed Repair',
+    });
+
+    expect(saved.latitude).toBe('10.000000');
+    expect(saved.longitude).toBe('20.000000');
+    expect(citiesService.FindById).not.toHaveBeenCalled();
+    expect(geocodingService.Geocode).not.toHaveBeenCalled();
+  });
+});

@@ -31,7 +31,15 @@ export class RepairRequestsRepository {
         {
           status: filter.status ?? null,
         },
-      )
+      );
+
+    if (filter.excludedStatuses && filter.excludedStatuses.length > 0) {
+      query.andWhere('request.status NOT IN (:...excludedStatuses)', {
+        excludedStatuses: filter.excludedStatuses,
+      });
+    }
+
+    query
       .andWhere('(:cityId::uuid IS NULL OR request.cityId = :cityId)', {
         cityId: filter.cityId ?? null,
       })
@@ -39,6 +47,12 @@ export class RepairRequestsRepository {
         '(:categoryId::uuid IS NULL OR request.categoryId = :categoryId)',
         {
           categoryId: filter.categoryId ?? null,
+        },
+      )
+      .andWhere(
+        '(:categoryIds::uuid[] IS NULL OR request.categoryId = ANY(:categoryIds))',
+        {
+          categoryIds: filter.categoryIds ?? null,
         },
       )
       .andWhere(
@@ -77,6 +91,21 @@ export class RepairRequestsRepository {
     }
   }
 
+  async TryAccept(
+    id: string,
+    offerId: string,
+    fromStatuses: RequestStatus[],
+  ): Promise<boolean> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(RepairRequest)
+      .set({ status: RequestStatus.Accepted, acceptedOfferId: offerId })
+      .where('id = :id', { id })
+      .andWhere('status IN (:...fromStatuses)', { fromStatuses })
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
   async Save(request: RepairRequest): Promise<RepairRequest> {
     try {
       return await this.repository.save(request);
@@ -106,11 +135,13 @@ export class RepairRequestsRepository {
 
 function BuildEmptyStatusCounts(): Record<RequestStatus, number> {
   return {
+    [RequestStatus.PendingReview]: 0,
     [RequestStatus.Open]: 0,
     [RequestStatus.OffersReceived]: 0,
     [RequestStatus.Accepted]: 0,
     [RequestStatus.InProgress]: 0,
     [RequestStatus.Completed]: 0,
     [RequestStatus.Cancelled]: 0,
+    [RequestStatus.Rejected]: 0,
   };
 }

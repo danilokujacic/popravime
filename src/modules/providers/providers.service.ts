@@ -18,6 +18,7 @@ import { SlugGenerator } from '../../shared/slug/slug.generator';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
+import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 import { GEOCODING_SERVICE } from '../../common/constants/di-tokens';
 
 @Injectable()
@@ -36,14 +37,14 @@ export class ProvidersService implements IProvidersService {
     ownerUserId: string,
     input: CreateProviderInput,
   ): Promise<Provider> {
+    await this.EnsureNoExistingProvider(ownerUserId);
+
     const city = await this.citiesService.FindById(input.cityId);
     const slug = await SlugGenerator.GenerateUnique(
       input.businessName,
       (candidate) => this.providerRepository.SlugExists(candidate),
     );
-    const geocode = await this.geocodingService.Geocode(
-      `${input.address}, ${city.name}, Montenegro`,
-    );
+    const coordinates = await this.ResolveCreateCoordinates(input, city.name);
 
     const provider = await this.providerRepository.Create({
       ownerUserId,
@@ -52,8 +53,8 @@ export class ProvidersService implements IProvidersService {
       description: input.description ?? null,
       address: input.address,
       cityId: input.cityId,
-      latitude: geocode?.latitude ?? null,
-      longitude: geocode?.longitude ?? null,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
       phone: input.phone ?? null,
       email: input.email ?? null,
       website: input.website ?? null,
@@ -85,15 +86,7 @@ export class ProvidersService implements IProvidersService {
     ApplyBasicFields(provider, input);
     ApplyContactFields(provider, input);
     ApplyWorkingHours(provider, input);
-
-    if (input.address !== undefined) {
-      const city = await this.citiesService.FindById(provider.cityId);
-      const geocode = await this.geocodingService.Geocode(
-        `${input.address}, ${city.name}, Montenegro`,
-      );
-      provider.latitude = geocode?.latitude ?? null;
-      provider.longitude = geocode?.longitude ?? null;
-    }
+    await this.ApplyCoordinates(provider, input);
 
     const saved = await this.providerRepository.Save(provider);
     this.logger.info({ providerId: id, ownerUserId }, 'Provider updated');
@@ -109,6 +102,17 @@ export class ProvidersService implements IProvidersService {
     await this.citiesService.DecrementProviderCount(provider.cityId);
 
     this.logger.info({ providerId: id, ownerUserId }, 'Provider deleted');
+  }
+
+  async GetForUser(userId: string) {
+    const provider = await this.providerRepository.FindByOwnerId(userId);
+     if (!provider) {
+      throw new DomainNotFoundException(
+        'PROVIDER_NOT_FOUND',
+        'Provider not found',
+      );
+    }
+    return provider;
   }
 
   async FindById(id: string): Promise<Provider> {
@@ -143,6 +147,10 @@ export class ProvidersService implements IProvidersService {
 
   CountByVerificationStatus(): Promise<Record<VerificationStatus, number>> {
     return this.providerRepository.CountByVerificationStatus();
+  }
+
+  FindCategoryIdsForOwner(ownerUserId: string): Promise<string[]> {
+    return this.providerCategoryRepository.ListCategoryIdsForOwner(ownerUserId);
   }
 
   async UpdateRatingStats(
@@ -184,6 +192,57 @@ export class ProvidersService implements IProvidersService {
       );
     }
   }
+
+  private async EnsureNoExistingProvider(ownerUserId: string): Promise<void> {
+    const alreadyExists =
+      await this.providerRepository.ExistsForOwner(ownerUserId);
+    if (alreadyExists) {
+      throw new DomainConflictException(
+        'PROVIDER_ALREADY_EXISTS',
+        'You already have a provider profile',
+      );
+    }
+  }
+
+  private async ResolveCreateCoordinates(
+    input: CreateProviderInput,
+    cityName: string,
+  ): Promise<{ latitude: string | null; longitude: string | null }> {
+    if (HasExplicitCoordinates(input)) {
+      return { latitude: input.latitude ?? null, longitude: input.longitude ?? null };
+    }
+    const geocode = await this.geocodingService.Geocode(
+      `${input.address}, ${cityName}, Montenegro`,
+    );
+    return { latitude: geocode?.latitude ?? null, longitude: geocode?.longitude ?? null };
+  }
+
+  private async ApplyCoordinates(
+    provider: Provider,
+    input: UpdateProviderInput,
+  ): Promise<void> {
+    if (HasExplicitCoordinates(input)) {
+      provider.latitude = input.latitude ?? null;
+      provider.longitude = input.longitude ?? null;
+      return;
+    }
+    if (input.address === undefined) {
+      return;
+    }
+    const city = await this.citiesService.FindById(provider.cityId);
+    const geocode = await this.geocodingService.Geocode(
+      `${input.address}, ${city.name}, Montenegro`,
+    );
+    provider.latitude = geocode?.latitude ?? null;
+    provider.longitude = geocode?.longitude ?? null;
+  }
+}
+
+function HasExplicitCoordinates(input: {
+  latitude?: string;
+  longitude?: string;
+}): boolean {
+  return input.latitude != null && input.longitude != null;
 }
 
 function ApplyBasicFields(

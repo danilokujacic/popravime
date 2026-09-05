@@ -14,12 +14,17 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { IMAGE_UPLOAD_OPTIONS } from '../../common/upload/upload-limits.constants';
 import { RepairRequestsService } from './repair-requests.service';
+import { ProvidersService } from '../providers/providers.service';
 import { CreateRepairRequestDto } from './dto/create-repair-request.dto';
 import { UpdateRepairRequestStatusDto } from './dto/update-repair-request-status.dto';
+import { ReviewRepairRequestDto } from './dto/review-repair-request.dto';
 import { ListRepairRequestsQueryDto } from './dto/list-repair-requests-query.dto';
 import { RepairRequestResponseDto } from './dto/repair-request-response.dto';
 import { RepairRequestResponseMapper } from './mappers/repair-request-response.mapper';
-import { ListRepairRequestsFilter } from './repair-requests.types';
+import {
+  ListRepairRequestsFilter,
+  RequestStatus,
+} from './repair-requests.types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -29,35 +34,26 @@ import { PaginatedResult } from '../../common/interfaces/paginated-result.interf
 
 const MAX_PHOTOS = 5;
 
-function BuildScopedFilter(
-  query: ListRepairRequestsQueryDto,
-  user: AuthenticatedUser,
-): ListRepairRequestsFilter {
-  const filter: ListRepairRequestsFilter = {
-    status: query.status,
-    cityId: query.cityId,
-    categoryId: query.categoryId,
-    urgency: query.urgency,
-  };
-
-  if (user.role === UserRole.Customer) {
-    return { ...filter, customerId: user.id };
-  }
-
-  return filter;
-}
+const UNMODERATED_STATUSES: RequestStatus[] = [
+  RequestStatus.PendingReview,
+  RequestStatus.Rejected,
+];
 
 @Controller('repair-requests')
 export class RepairRequestsController {
-  constructor(private readonly repairRequestsService: RepairRequestsService) {}
+  constructor(
+    private readonly repairRequestsService: RepairRequestsService,
+    private readonly providersService: ProvidersService,
+  ) {}
 
   @Get()
   async List(
     @Query() query: ListRepairRequestsQueryDto,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<PaginatedResult<RepairRequestResponseDto>> {
+    const filter = await this.BuildScopedFilter(query, user);
     const result = await this.repairRequestsService.List(
-      BuildScopedFilter(query, user),
+      filter,
       query.page,
       query.limit,
     );
@@ -73,9 +69,11 @@ export class RepairRequestsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<RepairRequestResponseDto> {
+    const providerCategoryIds = await this.ResolveProviderCategoryIds(user);
     const request = await this.repairRequestsService.FindByIdForViewer(
       id,
       user,
+      providerCategoryIds,
     );
     return RepairRequestResponseMapper.ToDto(request);
   }
@@ -89,7 +87,8 @@ export class RepairRequestsController {
     @Body() dto: CreateRepairRequestDto,
     @UploadedFiles() photos: Express.Multer.File[],
   ): Promise<RepairRequestResponseDto> {
-    const request = await this.repairRequestsService.Create(user.id, {
+    const request = await this.repairRequestsService.Create({
+      customerId: user.id,
       categoryId: dto.categoryId,
       brand: dto.brand,
       model: dto.model,
@@ -119,5 +118,78 @@ export class RepairRequestsController {
       dto.status,
     );
     return RepairRequestResponseMapper.ToDto(request);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  @Patch(':id/approve')
+  async Approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ReviewRepairRequestDto,
+  ): Promise<RepairRequestResponseDto> {
+    const request = await this.repairRequestsService.Approve(
+      id,
+      user.id,
+      dto.reviewNotes,
+    );
+    return RepairRequestResponseMapper.ToDto(request);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  @Patch(':id/reject')
+  async Reject(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ReviewRepairRequestDto,
+  ): Promise<RepairRequestResponseDto> {
+    const request = await this.repairRequestsService.Reject(
+      id,
+      user.id,
+      dto.reviewNotes,
+    );
+    return RepairRequestResponseMapper.ToDto(request);
+  }
+
+  private async ResolveProviderCategoryIds(
+    user: AuthenticatedUser,
+  ): Promise<string[] | undefined> {
+    if (user.role !== UserRole.ProviderOwner) {
+      return undefined;
+    }
+    return this.providersService.FindCategoryIdsForOwner(user.id);
+  }
+
+  private async BuildScopedFilter(
+    query: ListRepairRequestsQueryDto,
+    user: AuthenticatedUser,
+  ): Promise<ListRepairRequestsFilter> {
+    const filter: ListRepairRequestsFilter = {
+      status: query.status,
+      cityId: query.cityId,
+      categoryId: query.categoryId,
+      urgency: query.urgency,
+    };
+
+    if (user.role === UserRole.Customer) {
+      return { ...filter, customerId: user.id };
+    }
+
+    if (user.role === UserRole.ProviderOwner) {
+      return {
+        ...filter,
+        categoryId: undefined,
+        categoryIds: await this.providersService.FindCategoryIdsForOwner(
+          user.id,
+        ),
+        status: UNMODERATED_STATUSES.includes(filter.status as RequestStatus)
+          ? undefined
+          : filter.status,
+        excludedStatuses: UNMODERATED_STATUSES,
+      };
+    }
+
+    return filter;
   }
 }

@@ -39,6 +39,18 @@ export class ProvidersController {
     private readonly providerGalleryService: ProviderGalleryService,
   ) {}
 
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ProviderOwner)
+  @Get("me") 
+  async GetProviderForUser(
+    @CurrentUser() user: AuthenticatedUser
+
+  ) {
+    const provider = await this.providersService.GetForUser(user.id);
+
+    return ProviderResponseMapper.ToDto(provider);
+  }
+
   @Public()
   @Get()
   async List(
@@ -49,7 +61,6 @@ export class ProvidersController {
         cityId: query.cityId,
         categoryId: query.categoryId,
         search: query.search,
-        verificationStatus: query.verificationStatus,
       },
       query.page,
       query.limit,
@@ -86,6 +97,8 @@ export class ProvidersController {
       description: dto.description,
       address: dto.address,
       cityId: dto.cityId,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
       phone: dto.phone,
       email: dto.email,
       website: dto.website,
@@ -107,6 +120,8 @@ export class ProvidersController {
       businessName: dto.businessName,
       description: dto.description,
       address: dto.address,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
       phone: dto.phone,
       email: dto.email,
       website: dto.website,

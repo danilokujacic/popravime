@@ -189,7 +189,12 @@ function BuildRequest(overrides?: Partial<RepairRequest>): RepairRequest {
 }
 
 describe('OffersService.Create', () => {
-  function BuildService(request: RepairRequest) {
+  function BuildService(
+    request: RepairRequest,
+    provider: ReturnType<typeof BuildProvider> = BuildProvider({
+      verificationStatus: VerificationStatus.Verified,
+    }),
+  ) {
     const offersRepository = {
       Create: jest
         .fn()
@@ -199,7 +204,7 @@ describe('OffersService.Create', () => {
     } as unknown as OffersRepository;
 
     const providersService = {
-      FindById: jest.fn().mockResolvedValue(BuildProvider()),
+      FindById: jest.fn().mockResolvedValue(provider),
     } as unknown as ProvidersService;
 
     const repairRequestsService = {
@@ -233,7 +238,7 @@ describe('OffersService.Create', () => {
       logger,
     );
 
-    return { service, repairRequestsService, notificationsService };
+    return { service, repairRequestsService, notificationsService, offersRepository };
   }
 
   it('creates the offer and marks the request as offers_received', async () => {
@@ -274,5 +279,43 @@ describe('OffersService.Create', () => {
         partsType: PartsType.Original,
       }),
     ).rejects.toBeInstanceOf(DomainConflictException);
+  });
+
+  it('rejects submitting an offer for a provider that is still pending verification', async () => {
+    const { service, offersRepository } = BuildService(
+      BuildRequest(),
+      BuildProvider({ verificationStatus: VerificationStatus.Pending }),
+    );
+
+    await expect(
+      service.Create('provider-owner-1', {
+        requestId: 'request-1',
+        providerId: 'provider-1',
+        priceMin: '3000',
+        priceMax: '6000',
+        estimatedDuration: '2 days',
+        partsType: PartsType.Original,
+      }),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+    expect(offersRepository.Create).not.toHaveBeenCalled();
+  });
+
+  it('rejects submitting an offer for a provider that was rejected', async () => {
+    const { service, offersRepository } = BuildService(
+      BuildRequest(),
+      BuildProvider({ verificationStatus: VerificationStatus.Rejected }),
+    );
+
+    await expect(
+      service.Create('provider-owner-1', {
+        requestId: 'request-1',
+        providerId: 'provider-1',
+        priceMin: '3000',
+        priceMax: '6000',
+        estimatedDuration: '2 days',
+        partsType: PartsType.Original,
+      }),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+    expect(offersRepository.Create).not.toHaveBeenCalled();
   });
 });

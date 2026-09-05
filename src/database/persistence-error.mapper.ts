@@ -29,6 +29,11 @@ const CONFLICT_MAPPINGS: ConflictMapping[] = [
     message: 'Provider slug is already in use',
   },
   {
+    constraint: 'providers_owner_user_id_key',
+    code: 'PROVIDER_ALREADY_EXISTS',
+    message: 'You already have a provider profile',
+  },
+  {
     constraint: 'cities_slug_key',
     code: 'CITY_SLUG_TAKEN',
     message: 'City slug is already in use',

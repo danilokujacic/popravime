@@ -10,6 +10,7 @@ import {
 } from './repair-requests.types';
 import { IRepairRequestsService } from './repair-requests.service.interface';
 import { RequestStatusTransitions } from './state/request-status.transitions';
+import { ModerationStatusTransitions } from './state/moderation-status.transitions';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
@@ -19,6 +20,7 @@ import { STORAGE_SERVICE } from '../../common/constants/di-tokens';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/notifications.types';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { UserRole } from '../users/users.types';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 
@@ -26,6 +28,11 @@ const STATUS_CHANGE_NOTIFIABLE = new Set<RequestStatus>([
   RequestStatus.InProgress,
   RequestStatus.Completed,
   RequestStatus.Cancelled,
+]);
+
+const UNMODERATED_STATUSES = new Set<RequestStatus>([
+  RequestStatus.PendingReview,
+  RequestStatus.Rejected,
 ]);
 
 @Injectable()
@@ -36,18 +43,16 @@ export class RepairRequestsService implements IRepairRequestsService {
     private readonly storageService: StorageService,
     private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
+    private readonly auditLogsService: AuditLogsService,
     @InjectPinoLogger(RepairRequestsService.name)
     private readonly logger: PinoLogger,
   ) {}
 
-  async Create(
-    customerId: string,
-    input: CreateRepairRequestInput,
-  ): Promise<RepairRequest> {
+  async Create(input: CreateRepairRequestInput): Promise<RepairRequest> {
     const photoUrls = await this.UploadPhotos(input.photos ?? []);
 
     const request = await this.repairRequestsRepository.Create({
-      customerId,
+      customerId: input.customerId,
       categoryId: input.categoryId,
       brand: input.brand ?? null,
       model: input.model ?? null,
@@ -58,7 +63,11 @@ export class RepairRequestsService implements IRepairRequestsService {
     });
 
     this.logger.info(
-      { requestId: request.id, customerId, photoCount: photoUrls.length },
+      {
+        requestId: request.id,
+        customerId: input.customerId,
+        photoCount: photoUrls.length,
+      },
       'Repair request created',
     );
 
@@ -95,17 +104,37 @@ export class RepairRequestsService implements IRepairRequestsService {
   async FindByIdForViewer(
     id: string,
     viewer: AuthenticatedUser,
+    providerCategoryIds?: string[],
   ): Promise<RepairRequest> {
     const request = await this.FindById(id);
-    this.EnsureViewable(request, viewer);
+    this.EnsureViewable(request, viewer, providerCategoryIds);
     return request;
   }
 
   private EnsureViewable(
     request: RepairRequest,
     viewer: AuthenticatedUser,
+    providerCategoryIds?: string[],
   ): void {
-    if (viewer.role !== UserRole.Customer) {
+    if (viewer.role === UserRole.Admin) {
+      return;
+    }
+    if (viewer.role === UserRole.ProviderOwner) {
+      if (UNMODERATED_STATUSES.has(request.status)) {
+        throw new DomainForbiddenException(
+          'REPAIR_REQUEST_NOT_MODERATED',
+          'This repair request has not been approved yet',
+        );
+      }
+      if (
+        providerCategoryIds &&
+        !providerCategoryIds.includes(request.categoryId)
+      ) {
+        throw new DomainForbiddenException(
+          'REPAIR_REQUEST_CATEGORY_NOT_SERVICED',
+          'This repair request is outside your serviced categories',
+        );
+      }
       return;
     }
     if (request.customerId !== viewer.id) {
@@ -126,6 +155,96 @@ export class RepairRequestsService implements IRepairRequestsService {
 
   CountByStatus(): Promise<Record<RequestStatus, number>> {
     return this.repairRequestsRepository.CountByStatus();
+  }
+
+  Approve(
+    id: string,
+    adminId: string,
+    reviewNotes?: string,
+  ): Promise<RepairRequest> {
+    return this.Decide(id, adminId, RequestStatus.Open, reviewNotes);
+  }
+
+  Reject(
+    id: string,
+    adminId: string,
+    reviewNotes?: string,
+  ): Promise<RepairRequest> {
+    return this.Decide(id, adminId, RequestStatus.Rejected, reviewNotes);
+  }
+
+  @Transactional()
+  private async Decide(
+    id: string,
+    adminId: string,
+    status: RequestStatus.Open | RequestStatus.Rejected,
+    reviewNotes?: string,
+  ): Promise<RepairRequest> {
+    const request = await this.FindById(id);
+    this.EnsureModerationTransition(request.status, status);
+
+    request.status = status;
+    const saved = await this.repairRequestsRepository.Save(request);
+
+    await this.auditLogsService.Log({
+      actorId: adminId,
+      action: `repair_request.${status}`,
+      entityType: 'repair_request',
+      entityId: id,
+      metadata: reviewNotes ? { reviewNotes } : undefined,
+    });
+
+    await this.NotifyModerationDecision(saved, status);
+
+    this.logger.info(
+      { requestId: id, adminId, status },
+      'Repair request reviewed',
+    );
+
+    return saved;
+  }
+
+  private async NotifyModerationDecision(
+    request: RepairRequest,
+    status: RequestStatus.Open | RequestStatus.Rejected,
+  ): Promise<void> {
+    const customer = await this.usersService.FindById(request.customerId);
+
+    await this.notificationsService.Notify({
+      userId: customer.id,
+      type: NotificationType.StatusChange,
+      title:
+        status === RequestStatus.Open
+          ? 'Repair request approved'
+          : 'Repair request rejected',
+      body:
+        status === RequestStatus.Open
+          ? 'Your repair request was approved and is now visible to providers'
+          : 'Your repair request was not approved',
+      relatedEntityType: 'repair_request',
+      relatedEntityId: request.id,
+      email: {
+        kind: 'status-change',
+        payload: {
+          to: customer.email,
+          customerName: customer.fullName,
+          status: request.status,
+          requestId: request.id,
+        },
+      },
+    });
+  }
+
+  private EnsureModerationTransition(
+    from: RequestStatus,
+    to: RequestStatus,
+  ): void {
+    if (!ModerationStatusTransitions.CanTransition(from, to)) {
+      throw new DomainConflictException(
+        'INVALID_STATUS_TRANSITION',
+        `Cannot transition repair request from ${from} to ${to}`,
+      );
+    }
   }
 
   @Transactional()
@@ -200,16 +319,31 @@ export class RepairRequestsService implements IRepairRequestsService {
     this.EnsureOwnership(request, customerId);
     this.EnsureTransition(request.status, RequestStatus.Accepted);
 
+    const accepted = await this.repairRequestsRepository.TryAccept(
+      id,
+      offerId,
+      [RequestStatus.OffersReceived],
+    );
+    if (!accepted) {
+      this.logger.warn(
+        { requestId: id, offerId, customerId },
+        'Repair request offer acceptance lost the race to another offer',
+      );
+      throw new DomainConflictException(
+        'REPAIR_REQUEST_ALREADY_ACCEPTED',
+        'This repair request already has an accepted offer',
+      );
+    }
+
     request.status = RequestStatus.Accepted;
     request.acceptedOfferId = offerId;
-    const saved = await this.repairRequestsRepository.Save(request);
 
     this.logger.info(
       { requestId: id, offerId, customerId },
       'Repair request offer accepted',
     );
 
-    return saved;
+    return request;
   }
 
   private EnsureOwnership(request: RepairRequest, customerId: string): void {

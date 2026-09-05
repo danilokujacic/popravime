@@ -4,15 +4,19 @@ import {
   ArrayUnique,
   IsArray,
   IsEmail,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   IsUUID,
   IsUrl,
   MaxLength,
   MinLength,
+  Validate,
   ValidateNested,
 } from 'class-validator';
 import { WorkingHoursDto } from './working-hours.dto';
+import { PairedCoordinatesConstraint } from './paired-coordinates.validator';
 
 export class CreateProviderDto {
   @IsString()
@@ -34,6 +38,16 @@ export class CreateProviderDto {
   @IsUUID()
   @Expose({ name: 'city_id' })
   cityId: string;
+
+  @IsOptional()
+  @IsLatitude()
+  @Validate(PairedCoordinatesConstraint)
+  latitude?: string;
+
+  @IsOptional()
+  @IsLongitude()
+  @Validate(PairedCoordinatesConstraint)
+  longitude?: string;
 
   @IsOptional()
   @IsString()

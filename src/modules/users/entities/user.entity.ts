@@ -2,11 +2,13 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { UserRole } from '../users.types';
+import { OAuthProvider, UserRole } from '../users.types';
 
+@Index(['oauthProvider', 'oauthId'], { unique: true })
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -31,6 +33,18 @@ export class User {
     default: UserRole.Customer,
   })
   role: UserRole;
+
+  @Column({
+    name: 'oauth_provider',
+    type: 'enum',
+    enum: OAuthProvider,
+    enumName: 'oauth_provider_enum',
+    nullable: true,
+  })
+  oauthProvider: OAuthProvider | null;
+
+  @Column({ name: 'oauth_id', type: 'text', nullable: true })
+  oauthId: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

@@ -43,16 +43,40 @@ object. Errors always come back as:
 ```
 
 `code` is either a domain-specific string (e.g. `PROVIDER_NOT_OWNED`, `EMAIL_TAKEN`,
-`INVALID_OFFER_TRANSITION`) for business-rule rejections, or a generic exception class name
-(`BadRequestException`, `UnauthorizedException`, etc.) for validation/framework-level errors.
-The frontend should treat `code` as the stable machine-readable identifier for building
-user-facing messages (don't parse `message` — it's free text meant for logs/debugging, not UI
-copy) and should have a fallback generic-error UI for any `code` it doesn't specifically handle.
+`INVALID_OFFER_TRANSITION`) for business-rule rejections, or `VALIDATION_ERROR` for a failed
+request body (see below). **`message` is never meant to be shown to a user as-is — it's
+English, unlocalized, log/debug text.** Every error carries a stable, translatable identifier
+instead: `code` for business-rule rejections, and per-field `codes` (below) for validation
+failures. Build the frontend's i18n error-message map keyed on these, with a generic fallback
+string for any `code`/field-`code` it doesn't specifically handle yet.
 
-**Validation errors** (`400`, `code: "BadRequestException"`) put every failing field's message
-into one semicolon/comma-joined string in `message` — e.g. `"business_name must be longer than
-or equal to 2 characters, city_id must be a UUID"`. The frontend should surface this as-is (or
-parse it further) since there's no structured per-field error list.
+**Validation errors** (`400`, `code: "VALIDATION_ERROR"`) additionally carry a structured
+`fields` array — one entry per invalid field, each with the constraint(s) it failed as
+translation keys:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "email must be an email, password must be longer than or equal to 8 characters",
+    "fields": [
+      { "field": "email", "codes": ["IS_EMAIL"] },
+      { "field": "password", "codes": ["MIN_LENGTH"] }
+    ],
+    "statusCode": 400,
+    "path": "/auth/register",
+    "timestamp": "2026-09-04T12:00:00.000Z"
+  }
+}
+```
+
+`field` is the request body's own `snake_case` field name. `codes` are the failed constraint
+name(s) for that field in `SCREAMING_SNAKE_CASE` (`IS_EMAIL`, `MIN_LENGTH`, `IS_UUID`,
+`MATCHES_FIELD`, etc.) — usually one per field, but a field can fail more than one rule at once,
+so it's always an array. These are stable across the whole API (every DTO, every endpoint) since
+they're derived mechanically from the validation rule itself, not hand-written per field — no
+per-endpoint mapping table needed, just one `code → message` dictionary the frontend maintains
+once. `message` is still present as a fallback/log string, same rule as above: don't show it.
 
 ### 1.2 Pagination
 
@@ -86,16 +110,83 @@ navigate to is meaningfully different from a `provider_owner`, which is differen
 
 | Method | Path | Auth | Body |
 |---|---|---|---|
-| POST | `/auth/register` | public | `{email, password, full_name, phone?, role}` — `role` must be `customer` or `provider_owner` (not `admin`) |
+| POST | `/auth/register` | public | `{email, password, repeat_password, full_name, phone?, role}` — `repeat_password` must equal `password` (`400 VALIDATION_ERROR`, field `repeat_password` code `MATCHES_FIELD` otherwise); `role` must be `customer` or `provider_owner` (not `admin`) |
 | POST | `/auth/login` | public | `{email, password}` |
 | POST | `/auth/refresh` | public* | `{refresh_token}` |
 | POST | `/auth/logout` | public* | `{refresh_token}` |
+| GET | `/auth/google` | public | browser navigation (not XHR) — redirects to Google's consent screen |
+| GET | `/auth/google/callback` | public | Google redirects here; the backend then redirects the browser to `OAUTH_FRONTEND_REDIRECT_URL?code=...` (existing account) or `...?code=...&needs_role=1` (brand-new sign-up, see §2.1.1) |
+| GET | `/auth/facebook` | public | same idea, Facebook |
+| GET | `/auth/facebook/callback` | public | same idea, Facebook |
+| POST | `/auth/oauth/exchange` | public | `{code}` → `{access_token, refresh_token}`, same shape as login — only for a code from a plain (no `needs_role`) redirect |
+| POST | `/auth/oauth/complete` | public | `{code, role}` → `{access_token, refresh_token}` — only for a code from a `needs_role=1` redirect; `role` must be `customer` or `provider_owner` (not `admin`) |
 
 *"public" here means no `Authorization` header is checked, but `/refresh` and `/logout` both
 require a valid, unrevoked `refresh_token` in the JSON body — they're not truly anonymous.
 
 `register` and `login` both return `{access_token, refresh_token}` — the frontend is
 immediately authenticated after registration, no email verification step exists (see §9).
+
+### 2.1.1 Google/Facebook sign-in flow
+
+This is a full-page redirect flow, not a JS SDK/popup integration — deliberately, so it reuses
+the exact same token issuance and frontend cookie-setting path as email/password login instead
+of a second parallel one. It forks in two depending on whether the Google/Facebook identity
+matches an account that already exists.
+
+1. Render "Continue with Google" / "Continue with Facebook" as plain links (not fetch calls) to
+   `{NEXT_PUBLIC_API_URL}/auth/google` / `/auth/facebook`. Clicking navigates the whole page
+   there; the backend redirects to the provider's consent screen.
+2. After the user approves, the provider redirects back to the backend's own callback
+   (`/auth/google/callback` etc — already registered with Google/Facebook, nothing for the
+   frontend to configure). The backend then redirects the browser to
+   `OAUTH_FRONTEND_REDIRECT_URL` (defaults to `http://localhost:3000/auth/callback` in dev —
+   confirm the deployed value with ops) with a one-time `?code=` query param, in one of two
+   shapes:
+   - **Matched an existing account** (by a previously-linked Google/Facebook identity, or by
+     email against a password-registered account — linking is automatic and transparent, no
+     frontend involvement) → `?code=...`. Tokens are already issued.
+   - **No match — this identity has never signed in here before** → `?code=...&needs_role=1`.
+     No account has been created yet — the code only carries the verified name/email from
+     Google/Facebook, not a session.
+3. The frontend needs one route at that path (e.g. `app/auth/callback/page.tsx`) that branches
+   on the `needs_role` param:
+   - **Not present** (plain `?code=...`): do the same thing the existing `/api/auth/login` BFF
+     handler does, except calling `POST /auth/oauth/exchange` with `{code}` instead of
+     `/auth/login` — same `{access_token, refresh_token}` response, same cookie-setting, same
+     redirect-to-role-home afterward.
+   - **`needs_role=1`**: don't call `/oauth/exchange` (it will reject this code — wrong
+     endpoint for it). Instead show a "How will you use Popravi Me?" screen — the same two
+     choices as the existing registration role picker (`customer` "I need something fixed" /
+     `provider_owner` "I repair devices"), no other fields needed (name/email already came from
+     the provider). On submit, POST `{code, role}` to `/api/auth/oauth/complete` — a new BFF
+     route mirroring `/api/auth/oauth/exchange`'s but hitting `POST /auth/oauth/complete`
+     instead — which creates the account with the chosen role and returns
+     `{access_token, refresh_token}`, same downstream handling (cookie, fetch `/users/me`,
+     redirect to role home) as every other login path.
+   In both cases: **the raw tokens never appear in a URL or in the browser at all** — only the
+   one-time code does, and it's single-use and expires in ~60s (`OAUTH_EXCHANGE_CODE_TTL_SECONDS`)
+   even if unused, whichever shape it is.
+4. If the code is missing/expired/already-used/wrong-endpoint, both `/auth/oauth/exchange` and
+   `/auth/oauth/complete` return `401 OAUTH_CODE_INVALID` — show a generic "sign-in failed, try
+   again" and a link back to `/login`.
+5. A denied/failed OAuth attempt (user cancels at Google/Facebook, or credentials aren't
+   configured server-side) currently surfaces as a raw `401` JSON response from the backend
+   rather than a redirect back into the app — not yet polished with a `?error=` redirect. Worth
+   a follow-up if this is user-facing before launch; flagging rather than silently living with
+   it.
+
+Account linking, restated precisely now that role selection exists: this only ever happens by
+*email* match against a password-registered account (step 2, first bullet) — an existing
+account's role is never changed by linking. Role selection (step 3, second bullet) only ever
+runs for a genuinely new identity with no matching account at all, exactly like the registration
+form's role picker for email/password sign-up.
+
+**Account linking**: signing in with Google/Facebook using an email that already has a
+password-based account logs into *that same account* (matched by email) rather than creating a
+duplicate — the frontend doesn't need to do anything special for this, it's transparent.
+OAuth-created accounts are always `role: customer` — there's no OAuth path to a `provider_owner`
+account, that still goes through the full `/auth/register` + business-profile flow.
 
 ### 2.2 What the frontend must implement
 
@@ -144,16 +235,24 @@ than re-fetching on every screen that needs a city/category picker.
 | GET | `/categories` | public | query: `parent_category_id?` (for subcategory drill-down). Not paginated. |
 | GET | `/categories/:id` | public | |
 
-City shape: `{id, name, slug, region, is_active, provider_count}`. Category shape includes a
-`parent_category_id` (nullable) — the frontend needs to handle a two-level category tree
-(top-level categories have `parent_category_id: null`; subcategories reference a parent) if it
+City shape: `{id, name, slug, region, is_active, provider_count}`.
+
+Category shape: `{id, slug, icon_url, parent_category_id}` — note there is **no `name`**.
+Categories are not translated server-side; `slug` (e.g. `mobile-phones`) is a stable
+translation key, and the frontend owns a `slug → display string` dictionary per locale
+alongside its other i18n strings (the backend never sees or negotiates a locale for this).
+`parent_category_id` (nullable) needs the same two-level-tree handling as before (top-level
+categories have `parent_category_id: null`; subcategories reference a parent) if the frontend
 wants a drill-down category picker, or can just flatten it if a flat list is acceptable.
+Wherever a category is referenced elsewhere in the API (`category_id` on providers/requests/
+price-estimates), it's always the `id` — resolve the display name client-side via the same
+`slug` dictionary by looking up the category object, not by round-tripping to the backend.
 
 ## 5. Providers
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/providers` | public | paginated; query: `city_id?`, `category_id?`, `search?` (business name substring), `verification_status?`, `page`, `limit` |
+| GET | `/providers` | public | paginated; query: `city_id?`, `category_id?`, `search?` (business name substring), `verification_status?` (accepted but has no effect, see below), `page`, `limit` |
 | GET | `/providers/:id` | public | |
 | GET | `/providers/slug/:slug` | public | for pretty provider-profile URLs |
 | POST | `/providers` | `provider_owner` | creates the caller's own provider profile — see below |
@@ -163,9 +262,16 @@ wants a drill-down category picker, or can just flatten it if a flat list is acc
 | POST | `/providers/:id/gallery` | `provider_owner`, must own it | multipart, see §6 |
 | DELETE | `/providers/:id/gallery/:imageId` | `provider_owner`, must own it | |
 
-**`POST /providers` body**: `{business_name, description?, address, city_id, phone?, email?,
-website?, working_hours?, category_ids: [uuid, ...]}` (`category_ids` required, min 1 entry).
-`PATCH` accepts the same fields, all optional, minus `category_ids`.
+**`POST /providers` body**: `{business_name, description?, address, city_id, latitude?,
+longitude?, phone?, email?, website?, working_hours?, category_ids: [uuid, ...]}`
+(`category_ids` required, min 1 entry). `PATCH` accepts the same fields, all optional, minus
+`category_ids`.
+
+**`latitude`/`longitude`** are optional numeric strings (e.g. `"42.430400"`) — supply both
+together to pin the exact location yourself, or omit both to have the server derive them from
+`address` via geocoding (the previous, still-default behavior). Supplying only one of the two
+is rejected as invalid. On `PATCH`, supplying both skips geocoding even if `address` is also
+being changed in the same request — the coordinates you send always win over the address.
 
 **`working_hours`** is a nested object, one optional key per weekday
 (`monday`...`sunday`), each either `null` (closed that day) or `{open: "HH:MM", close:
@@ -176,15 +282,22 @@ enforces it too).
 
 **Provider response shape**: `{id, owner_user_id, business_name, slug, description,
 address, city_id, latitude, longitude, phone, email, website, working_hours, verification_status,
-is_certified, average_rating, review_count, created_at}`. `latitude`/`longitude` are populated
-automatically server-side via geocoding when a provider is created/its address changes — the
-frontend never sends them and shouldn't expose fields to edit them; they can be `null` if
-geocoding failed for that address, so any map display must handle that.
+is_certified, average_rating, review_count, created_at}`. `latitude`/`longitude` are either
+whatever the caller sent on create/update, or — when not supplied — populated automatically
+server-side via geocoding; they can be `null` if geocoding failed for that address, so any map
+display must handle that.
 
 `verification_status` is one of `pending`/`verified`/`rejected`; `is_certified` is the boolean
 the frontend should actually gate a "verified" badge on. `average_rating` is a string (e.g.
 `"4.67"`) or `null` if the provider has no reviews yet — parse as a float for display, don't
 assume it's always present.
+
+`GET /providers` (the directory listing) always returns only `verified` providers — the
+`verification_status` query param is accepted for backward compatibility but has no effect on
+results, so don't rely on it to filter for anything other than `verified`. This restriction
+applies only to the directory listing: `GET /providers/:id` and `GET /providers/slug/:slug`
+still return a provider regardless of its verification status, e.g. so an owner can preview
+their own pending profile by direct link.
 
 The frontend needs: a provider directory/search screen (list + filters), a provider profile
 page (public, showing gallery/reviews/working hours/contact), and — for `provider_owner`
@@ -217,26 +330,36 @@ it as a state machine, not just a form.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/repair-requests` | any authenticated | paginated; a `customer` only ever sees their own (enforced server-side, the query is auto-scoped); a `provider_owner`/`admin` sees all, filterable |
-| GET | `/repair-requests/:id` | any authenticated | a `customer` gets `403` on a request that isn't theirs; `provider_owner`/`admin` can view any |
-| POST | `/repair-requests` | `customer` | multipart, see below |
+| GET | `/repair-requests` | any authenticated | paginated; a `customer` only ever sees their own, at any status (enforced server-side); a `provider_owner` sees all requests except `pending_review`/`rejected` (moderation-gated, see below) in the categories serviced by their `verified` provider(s) — a `provider_owner` with no `verified` provider yet sees an empty list; `admin` sees everything, filterable |
+| GET | `/repair-requests/:id` | any authenticated | a `customer` gets `403` on a request that isn't theirs; a `provider_owner` gets `403` on one still `pending_review`/`rejected`, outside their serviced categories, or serviced only by a `pending`/`rejected` provider of theirs; `admin` can view any |
+| POST | `/repair-requests` | `customer` | multipart, see below — an account is required |
 | PATCH | `/repair-requests/:id/status` | `customer`, must own it | body: `{status}` |
+| PATCH | `/repair-requests/:id/approve` | `admin` | body: `{review_notes?}` — moves `pending_review` → `open` |
+| PATCH | `/repair-requests/:id/reject` | `admin` | body: `{review_notes?}` — moves `pending_review` → `rejected` |
 
 List query params: `status?`, `city_id?`, `category_id?`, `urgency?`, `page`, `limit`.
 
-**`POST /repair-requests`** (multipart): fields `category_id`, `brand?`, `model?`,
-`description` (10–4000 chars), `city_id`, `urgency` (`standard`|`urgent`), plus 0–5 `photos`
-files.
+**`POST /repair-requests`** (multipart, `customer` role required — see §2.1.1 for the
+lowest-friction way to get a `customer` account via Google/Facebook): fields `category_id`,
+`brand?`, `model?`, `description` (10–4000 chars), `city_id`, `urgency` (`standard`|`urgent`),
+plus 0–5 `photos` files. Every new report starts at `pending_review` and is invisible to
+providers (and to the reporting customer's "case looks live" expectations — show it as
+"under review") until an admin approves it (see Status values below) — this is intentional
+anti-spam moderation, not something the frontend needs to work around.
 
-**Status values**: `open` → `offers_received` → `accepted` → `in_progress` → `completed`, with
-`cancelled` reachable from most states. The frontend should only expose status-changing actions
-that make sense for the current status (e.g. don't show "mark in progress" before an offer is
-accepted) — the server enforces valid transitions and rejects invalid ones with `409
-INVALID_STATUS_TRANSITION`, but the UI shouldn't invite the user into an action that's certain
-to fail. `open`/`offers_received`/`accepted`/`in_progress`/`completed`/`cancelled` transitions
-are customer-driven via this endpoint; the `offers_received`/`accepted` transitions specifically
-also happen automatically as a side effect of the offers flow below (don't build a manual
-"advance to offers_received" button — it happens when a provider submits an offer).
+**Status values**: every request starts at `pending_review`. An admin then moves it to `open` or
+`rejected` (terminal) via the approve/reject endpoints above — this step is moderator-only, a
+customer cannot self-approve their own request even though they own it. Once `open`: `open` →
+`offers_received` → `accepted` → `in_progress` → `completed`, with `cancelled` reachable from
+most states. The frontend should only expose status-changing actions that make sense for the
+current status (e.g. don't show "mark in progress" before an offer is accepted, and don't expose
+any customer action at all while `pending_review`) — the server enforces valid transitions and
+rejects invalid ones with `409 INVALID_STATUS_TRANSITION`, but the UI shouldn't invite the user
+into an action that's certain to fail. `open`/`offers_received`/`accepted`/`in_progress`/
+`completed`/`cancelled` transitions are customer-driven via `PATCH .../status`; the
+`offers_received`/`accepted` transitions specifically also happen automatically as a side effect
+of the offers flow below (don't build a manual "advance to offers_received" button — it happens
+when a provider submits an offer).
 
 Response shape: `{id, customer_id, category_id, brand, model, description, photo_urls: [url,
 ...], city_id, urgency, status, accepted_offer_id, created_at}`.
@@ -253,7 +376,10 @@ Response shape: `{id, customer_id, category_id, brand, model, description, photo
 **`POST /offers`** body: `{request_id, provider_id, price_min, price_max (both numeric
 strings), estimated_duration, parts_type ("oem"|"aftermarket"), message?}`. The caller must own
 `provider_id` — the API returns `403 PROVIDER_NOT_OWNED` otherwise, so the frontend should only
-ever let a `provider_owner` reach this form, pre-scoped to one of their own providers.
+ever let a `provider_owner` reach this form, pre-scoped to one of their own providers. That
+provider must also be `verified` — the API returns `403 PROVIDER_NOT_VERIFIED` for a `pending`
+or `rejected` provider, so the frontend should hide the "make an offer" action for providers
+that aren't `verified` yet.
 
 **`PATCH /offers/:id/status`** — `status` is one of `accepted`/`rejected`/`withdrawn`.
 `accepted`/`rejected` must be called by the repair request's customer; `withdrawn` must be

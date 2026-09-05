@@ -50,4 +50,13 @@ export const EnvValidationSchema = Joi.object({
 
   ADMIN_EMAIL: Joi.string().email().required(),
   ADMIN_PASSWORD: Joi.string().min(8).required(),
+
+  GOOGLE_CLIENT_ID: Joi.string().allow('').optional(),
+  GOOGLE_CLIENT_SECRET: Joi.string().allow('').optional(),
+  GOOGLE_CALLBACK_URL: Joi.string().uri().allow('').optional(),
+  FACEBOOK_CLIENT_ID: Joi.string().allow('').optional(),
+  FACEBOOK_CLIENT_SECRET: Joi.string().allow('').optional(),
+  FACEBOOK_CALLBACK_URL: Joi.string().uri().allow('').optional(),
+  OAUTH_FRONTEND_REDIRECT_URL: Joi.string().uri().allow('').optional(),
+  OAUTH_EXCHANGE_CODE_TTL_SECONDS: Joi.number().default(60),
 });

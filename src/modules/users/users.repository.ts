@@ -6,7 +6,7 @@ import {
   IsQueryFailedError,
   PersistenceErrorMapper,
 } from '../../database/persistence-error.mapper';
-import { UserCredentials } from './users.types';
+import { OAuthProvider, UserCredentials } from './users.types';
 
 @Injectable()
 export class UsersRepository {
@@ -21,6 +21,15 @@ export class UsersRepository {
 
   FindByEmail(email: string): Promise<User | null> {
     return this.repository.findOne({ where: { email } });
+  }
+
+  FindByOAuthIdentity(
+    provider: OAuthProvider,
+    providerId: string,
+  ): Promise<User | null> {
+    return this.repository.findOne({
+      where: { oauthProvider: provider, oauthId: providerId },
+    });
   }
 
   async FindCredentials(email: string): Promise<UserCredentials | null> {

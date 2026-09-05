@@ -66,7 +66,7 @@ export class RepairRequest {
     type: 'enum',
     enum: RequestStatus,
     enumName: 'request_status_enum',
-    default: RequestStatus.Open,
+    default: RequestStatus.PendingReview,
   })
   status: RequestStatus;
 
