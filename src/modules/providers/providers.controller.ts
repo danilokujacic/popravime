@@ -41,11 +41,10 @@ export class ProvidersController {
 
   @UseGuards(RolesGuard)
   @Roles(UserRole.ProviderOwner)
-  @Get("me") 
+  @Get('me')
   async GetProviderForUser(
-    @CurrentUser() user: AuthenticatedUser
-
-  ) {
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ProviderResponseDto> {
     const provider = await this.providersService.GetForUser(user.id);
 
     return ProviderResponseMapper.ToDto(provider);

@@ -17,6 +17,7 @@ export interface IProvidersService {
     input: UpdateProviderInput,
   ): Promise<Provider>;
   Delete(id: string, ownerUserId: string): Promise<void>;
+  GetForUser(userId: string): Promise<Provider>;
   FindById(id: string): Promise<Provider>;
   FindBySlug(slug: string): Promise<Provider>;
   List(

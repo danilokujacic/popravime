@@ -104,9 +104,9 @@ export class ProvidersService implements IProvidersService {
     this.logger.info({ providerId: id, ownerUserId }, 'Provider deleted');
   }
 
-  async GetForUser(userId: string) {
+  async GetForUser(userId: string): Promise<Provider> {
     const provider = await this.providerRepository.FindByOwnerId(userId);
-     if (!provider) {
+    if (!provider) {
       throw new DomainNotFoundException(
         'PROVIDER_NOT_FOUND',
         'Provider not found',
