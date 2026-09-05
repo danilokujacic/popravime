@@ -6,6 +6,7 @@ export interface DataSourceCredentials {
   username: string;
   password: string;
   database: string;
+  ssl?: boolean;
 }
 
 export function BuildDataSourceOptions(
@@ -18,6 +19,7 @@ export function BuildDataSourceOptions(
     username: credentials.username,
     password: credentials.password,
     database: credentials.database,
+    ssl: credentials.ssl ? { rejectUnauthorized: true } : false,
     synchronize: false,
     invalidWhereValuesBehavior: { undefined: 'ignore' },
     entities: [`${__dirname}/../modules/**/entities/*.entity{.ts,.js}`],

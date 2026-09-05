@@ -51,6 +51,8 @@ docker compose up --build
 `postgres` in `docker-compose.yml` is **local development only** — production points at a
 managed cloud Postgres instance, not this container.
 
+For a full production deploy (Hetzner + Neon + Cloudflare R2 + nginx), see `DEPLOY.md`.
+
 ## Scripts
 
 | Script | Purpose |

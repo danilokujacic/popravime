@@ -5,13 +5,28 @@ export const EnvValidationSchema = Joi.object({
     .valid('development', 'test', 'production')
     .default('development'),
   PORT: Joi.number().port().default(3000),
-  CORS_ORIGIN: Joi.string().allow('').optional(),
+  CORS_ORIGIN: Joi.string()
+    .allow('')
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.string()
+        .invalid('', '*')
+        .required()
+        .messages({
+          'any.required':
+            'CORS_ORIGIN must be set to a concrete allow-list of origins in production',
+          'any.invalid':
+            'CORS_ORIGIN must not be empty or "*" in production — set a concrete allow-list of origins',
+        }),
+      otherwise: Joi.string().optional(),
+    }),
 
   DATABASE_HOST: Joi.string().required(),
   DATABASE_PORT: Joi.number().port().default(5432),
   DATABASE_USER: Joi.string().required(),
   DATABASE_PASSWORD: Joi.string().required(),
   DATABASE_NAME: Joi.string().required(),
+  DATABASE_SSL: Joi.boolean().default(false),
 
   REDIS_HOST: Joi.string().required(),
   REDIS_PORT: Joi.number().port().default(6379),

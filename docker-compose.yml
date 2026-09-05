@@ -1,24 +1,31 @@
 services:
-  # api:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   networks: [ edge, internal ]
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     minio:
-  #       condition: service_healthy
-  #     maildev:
-  #       condition: service_started
-  #   env_file: .env
-  #   environment:
-  #     DATABASE_HOST: postgres
-  #     REDIS_HOST: redis
-  #     STORAGE_ENDPOINT: http://minio:9000
-  #     EMAIL_HOST: maildev
+  # Production-safe by default: only depends on redis (which production also runs locally on
+  # the host per the deploy runbook) and takes every other value straight from env_file, so a
+  # production `.env` pointing DATABASE_HOST/STORAGE_ENDPOINT/EMAIL_HOST at Neon/R2/a real SMTP
+  # relay is never silently overridden. docker-compose.override.yml adds the local
+  # postgres/minio/maildev wiring on top of this for `docker compose up --build` in dev.
+  # PORT is pinned to 3000 (matching the Dockerfile and nginx's upstream) regardless of what a
+  # host-run `pnpm start:dev` uses in .env — containers never have a host port-conflict reason
+  # to change it.
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks: [ edge, internal ]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      PORT: '3000'
+    healthcheck:
+      test: [ 'CMD', 'node', '-e', "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   postgres:
     # Local development only. Production uses a managed cloud Postgres instance,
@@ -77,13 +84,20 @@ services:
     ports:
       - '1080:1080'
       - '1025:1025'
-  # nginx:
-  #   image: nginx:alpine
-  #   networks: [ edge ]
-  #   depends_on: [ api ]
-  #   ports: [ '80:80' ]
-  #   volumes:
-  #     - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+  nginx:
+    image: nginx:alpine
+    networks: [ edge ]
+    restart: unless-stopped
+    depends_on: [ api ]
+    ports: [ '80:80', '443:443' ]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # TLS certificates issued on the host (e.g. certbot in webroot mode), mounted read-only.
+      # See DEPLOY.md for how these are obtained/renewed.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # certbot's HTTP-01 webroot: a bind mount (not a named volume) so the host's own certbot
+      # process and this container see the same challenge files. See DEPLOY.md.
+      - ./certbot-webroot:/var/www/certbot
 
 networks:
   edge:

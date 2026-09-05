@@ -8,6 +8,17 @@ import { StorageService } from './storage.service.interface';
 import { UploadFileInput, UploadFileResult } from './storage.types';
 import { StorageConfig } from '../../../config/storage.config';
 
+const SAFE_FILE_NAME_MAX_LENGTH = 100;
+
+function SanitizeFileName(fileName: string): string {
+  const sanitized = fileName
+    .replace(/[^A-Za-z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '');
+
+  return sanitized.slice(0, SAFE_FILE_NAME_MAX_LENGTH) || 'file';
+}
+
 export class S3StorageService implements StorageService {
   private readonly client: S3Client;
 
@@ -26,7 +37,7 @@ export class S3StorageService implements StorageService {
   }
 
   async Upload(input: UploadFileInput): Promise<UploadFileResult> {
-    const key = `${randomUUID()}-${input.fileName}`;
+    const key = `${randomUUID()}-${SanitizeFileName(input.fileName)}`;
 
     await this.client.send(
       new PutObjectCommand({
