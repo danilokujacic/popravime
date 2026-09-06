@@ -1,14 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { ConfigType } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { ProviderCategory } from '../entities/provider-category.entity';
-import { VerificationStatus } from '../providers.types';
+import { EligibleStatuses } from '../providers.types';
+import { verificationConfig } from '../../../config/verification.config';
 
 @Injectable()
 export class ProviderCategoryRepository {
   constructor(
     @InjectRepository(ProviderCategory)
     private readonly repository: Repository<ProviderCategory>,
+    @Inject(verificationConfig.KEY)
+    private readonly config: ConfigType<typeof verificationConfig>,
   ) {}
 
   async ReplaceForProvider(
@@ -36,8 +40,8 @@ export class ProviderCategoryRepository {
       .createQueryBuilder('providerCategory')
       .innerJoin('providerCategory.provider', 'provider')
       .where('provider.ownerUserId = :ownerUserId', { ownerUserId })
-      .andWhere('provider.verificationStatus = :verificationStatus', {
-        verificationStatus: VerificationStatus.Verified,
+      .andWhere('provider.verificationStatus = ANY(:eligibleStatuses)', {
+        eligibleStatuses: EligibleStatuses(this.config.required),
       })
       .select('providerCategory.categoryId', 'categoryId')
       .getRawMany<{ categoryId: string }>();

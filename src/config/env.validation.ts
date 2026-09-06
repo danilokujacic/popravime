@@ -74,4 +74,6 @@ export const EnvValidationSchema = Joi.object({
   FACEBOOK_CALLBACK_URL: Joi.string().uri().allow('').optional(),
   OAUTH_FRONTEND_REDIRECT_URL: Joi.string().uri().allow('').optional(),
   OAUTH_EXCHANGE_CODE_TTL_SECONDS: Joi.number().default(60),
+
+  VERIFICATION_REQUIRED: Joi.boolean().default(true),
 });

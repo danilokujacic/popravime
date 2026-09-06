@@ -277,11 +277,17 @@ describe('Database integration', () => {
     ).rejects.toThrow();
   });
 
-  it('only lists verified providers through the public directory', async () => {
+  it('lists providers through the public directory according to the verification-required setting', async () => {
     const cityRepo = dataSource.getRepository(City);
     const userRepo = dataSource.getRepository(User);
     const providerRepo = dataSource.getRepository(Provider);
-    const providerRepository = new ProviderRepository(providerRepo);
+    const providerRepositoryRequired = new ProviderRepository(providerRepo, {
+      required: true,
+    });
+    const providerRepositoryNotRequired = new ProviderRepository(
+      providerRepo,
+      { required: false },
+    );
 
     const city = await cityRepo.save(
       cityRepo.create({ name: 'Bar', slug: 'bar-it3', region: 'Coastal' }),
@@ -332,22 +338,39 @@ describe('Database integration', () => {
       VerificationStatus.Rejected,
     );
 
-    const result = await providerRepository.List({ cityId: city.id }, 1, 10);
-
-    expect(result.items.map((item) => item.businessName)).toEqual([
+    const requiredResult = await providerRepositoryRequired.List(
+      { cityId: city.id },
+      1,
+      10,
+    );
+    expect(requiredResult.items.map((item) => item.businessName)).toEqual([
       'Verified Repair',
     ]);
+
+    const notRequiredResult = await providerRepositoryNotRequired.List(
+      { cityId: city.id },
+      1,
+      10,
+    );
+    expect(
+      notRequiredResult.items.map((item) => item.businessName).sort(),
+    ).toEqual(['Pending Repair', 'Verified Repair']);
   });
 
-  it('only counts a provider owner’s verified providers toward their serviced categories', async () => {
+  it('counts a provider owner’s serviced categories according to the verification-required setting', async () => {
     const cityRepo = dataSource.getRepository(City);
     const categoryRepo = dataSource.getRepository(Category);
     const userRepo = dataSource.getRepository(User);
     const providerRepo = dataSource.getRepository(Provider);
     const providerCategoryRepo = dataSource.getRepository(ProviderCategory);
-    const providerCategoryRepository = new ProviderCategoryRepository(
+    const providerCategoryRepositoryRequired = new ProviderCategoryRepository(
       providerCategoryRepo,
+      { required: true },
     );
+    const providerCategoryRepositoryNotRequired =
+      new ProviderCategoryRepository(providerCategoryRepo, {
+        required: false,
+      });
 
     const city = await cityRepo.save(
       cityRepo.create({ name: 'Ulcinj', slug: 'ulcinj-it4', region: 'Coastal' }),
@@ -357,6 +380,9 @@ describe('Database integration', () => {
     );
     const verifiedCategory = await categoryRepo.save(
       categoryRepo.create({ name: 'Washing machines', slug: 'washers-it4' }),
+    );
+    const rejectedCategory = await categoryRepo.save(
+      categoryRepo.create({ name: 'Fridges', slug: 'fridges-it4' }),
     );
 
     const soleOwnerPending = await userRepo.save(
@@ -409,17 +435,62 @@ describe('Database integration', () => {
       }),
     );
 
-    const solePendingCategories =
-      await providerCategoryRepository.ListCategoryIdsForOwner(
-        soleOwnerPending.id,
-      );
-    expect(solePendingCategories).toEqual([]);
+    const soleOwnerRejected = await userRepo.save(
+      userRepo.create({
+        email: 'sole-rejected-owner-it4@popravime.me',
+        passwordHash: 'hash',
+        fullName: 'Sole Rejected Owner',
+        role: UserRole.ProviderOwner,
+      }),
+    );
+    const soleRejectedProvider = await providerRepo.save(
+      providerRepo.create({
+        ownerUserId: soleOwnerRejected.id,
+        businessName: 'Sole Rejected Repair',
+        slug: 'sole-rejected-repair-it4',
+        address: 'Address',
+        cityId: city.id,
+        verificationStatus: VerificationStatus.Rejected,
+      }),
+    );
+    await providerCategoryRepo.save(
+      providerCategoryRepo.create({
+        providerId: soleRejectedProvider.id,
+        categoryId: rejectedCategory.id,
+      }),
+    );
 
-    const soleVerifiedCategories =
-      await providerCategoryRepository.ListCategoryIdsForOwner(
+    expect(
+      await providerCategoryRepositoryRequired.ListCategoryIdsForOwner(
+        soleOwnerPending.id,
+      ),
+    ).toEqual([]);
+    expect(
+      await providerCategoryRepositoryRequired.ListCategoryIdsForOwner(
         soleOwnerVerified.id,
-      );
-    expect(soleVerifiedCategories).toEqual([verifiedCategory.id]);
+      ),
+    ).toEqual([verifiedCategory.id]);
+    expect(
+      await providerCategoryRepositoryRequired.ListCategoryIdsForOwner(
+        soleOwnerRejected.id,
+      ),
+    ).toEqual([]);
+
+    expect(
+      await providerCategoryRepositoryNotRequired.ListCategoryIdsForOwner(
+        soleOwnerPending.id,
+      ),
+    ).toEqual([pendingCategory.id]);
+    expect(
+      await providerCategoryRepositoryNotRequired.ListCategoryIdsForOwner(
+        soleOwnerVerified.id,
+      ),
+    ).toEqual([verifiedCategory.id]);
+    expect(
+      await providerCategoryRepositoryNotRequired.ListCategoryIdsForOwner(
+        soleOwnerRejected.id,
+      ),
+    ).toEqual([]);
   });
 
   it('rejects creating a second provider for an owner who already has one', async () => {

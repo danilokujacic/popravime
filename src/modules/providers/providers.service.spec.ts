@@ -14,16 +14,20 @@ function BuildService(categoryIds: string[]) {
   } as unknown as ProviderCategoryRepository;
   const citiesService = {} as unknown as CitiesService;
   const geocodingService = {} as unknown as IGeocodingService;
+  const verification = {
+    required: true,
+  } as unknown as ConstructorParameters<typeof ProvidersService>[4];
   const logger = {
     info: jest.fn(),
     warn: jest.fn(),
-  } as unknown as ConstructorParameters<typeof ProvidersService>[4];
+  } as unknown as ConstructorParameters<typeof ProvidersService>[5];
 
   const service = new ProvidersService(
     providerRepository,
     providerCategoryRepository,
     citiesService,
     geocodingService,
+    verification,
     logger,
   );
 
@@ -79,16 +83,20 @@ describe('ProvidersService.Create', () => {
     const geocodingService = {
       Geocode: jest.fn(),
     } as unknown as IGeocodingService;
+    const verification = {
+      required: true,
+    } as unknown as ConstructorParameters<typeof ProvidersService>[4];
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof ProvidersService>[4];
+    } as unknown as ConstructorParameters<typeof ProvidersService>[5];
 
     const service = new ProvidersService(
       providerRepository,
       providerCategoryRepository,
       citiesService,
       geocodingService,
+      verification,
       logger,
     );
 
@@ -188,16 +196,20 @@ describe('ProvidersService.Update', () => {
     const geocodingService = {
       Geocode: jest.fn(),
     } as unknown as IGeocodingService;
+    const verification = {
+      required: true,
+    } as unknown as ConstructorParameters<typeof ProvidersService>[4];
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof ProvidersService>[4];
+    } as unknown as ConstructorParameters<typeof ProvidersService>[5];
 
     const service = new ProvidersService(
       providerRepository,
       providerCategoryRepository,
       citiesService,
       geocodingService,
+      verification,
       logger,
     );
 

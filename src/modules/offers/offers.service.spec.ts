@@ -89,10 +89,14 @@ describe('OffersService.Accept', () => {
       Notify: jest.fn().mockResolvedValue(undefined),
     } as unknown as NotificationsService;
 
+    const verification = {
+      required: true,
+    } as unknown as ConstructorParameters<typeof OffersService>[5];
+
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof OffersService>[5];
+    } as unknown as ConstructorParameters<typeof OffersService>[6];
 
     const service = new OffersService(
       offersRepository,
@@ -100,6 +104,7 @@ describe('OffersService.Accept', () => {
       repairRequestsService,
       usersService,
       notificationsService,
+      verification,
       logger,
     );
 
@@ -194,6 +199,7 @@ describe('OffersService.Create', () => {
     provider: ReturnType<typeof BuildProvider> = BuildProvider({
       verificationStatus: VerificationStatus.Verified,
     }),
+    verificationRequired = true,
   ) {
     const offersRepository = {
       Create: jest
@@ -224,10 +230,14 @@ describe('OffersService.Create', () => {
       Notify: jest.fn().mockResolvedValue(undefined),
     } as unknown as NotificationsService;
 
+    const verification = {
+      required: verificationRequired,
+    } as unknown as ConstructorParameters<typeof OffersService>[5];
+
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof OffersService>[5];
+    } as unknown as ConstructorParameters<typeof OffersService>[6];
 
     const service = new OffersService(
       offersRepository,
@@ -235,6 +245,7 @@ describe('OffersService.Create', () => {
       repairRequestsService,
       usersService,
       notificationsService,
+      verification,
       logger,
     );
 
@@ -281,10 +292,11 @@ describe('OffersService.Create', () => {
     ).rejects.toBeInstanceOf(DomainConflictException);
   });
 
-  it('rejects submitting an offer for a provider that is still pending verification', async () => {
+  it('rejects submitting an offer for a pending provider when verification is required', async () => {
     const { service, offersRepository } = BuildService(
       BuildRequest(),
       BuildProvider({ verificationStatus: VerificationStatus.Pending }),
+      true,
     );
 
     await expect(
@@ -300,22 +312,44 @@ describe('OffersService.Create', () => {
     expect(offersRepository.Create).not.toHaveBeenCalled();
   });
 
-  it('rejects submitting an offer for a provider that was rejected', async () => {
+  it('creates the offer for a pending provider when verification is not required', async () => {
     const { service, offersRepository } = BuildService(
       BuildRequest(),
-      BuildProvider({ verificationStatus: VerificationStatus.Rejected }),
+      BuildProvider({ verificationStatus: VerificationStatus.Pending }),
+      false,
     );
 
-    await expect(
-      service.Create('provider-owner-1', {
-        requestId: 'request-1',
-        providerId: 'provider-1',
-        priceMin: '3000',
-        priceMax: '6000',
-        estimatedDuration: '2 days',
-        partsType: PartsType.Original,
-      }),
-    ).rejects.toBeInstanceOf(DomainForbiddenException);
-    expect(offersRepository.Create).not.toHaveBeenCalled();
+    await service.Create('provider-owner-1', {
+      requestId: 'request-1',
+      providerId: 'provider-1',
+      priceMin: '3000',
+      priceMax: '6000',
+      estimatedDuration: '2 days',
+      partsType: PartsType.Original,
+    });
+
+    expect(offersRepository.Create).toHaveBeenCalled();
+  });
+
+  it('rejects submitting an offer for a rejected provider regardless of the verification-required setting', async () => {
+    for (const verificationRequired of [true, false]) {
+      const { service, offersRepository } = BuildService(
+        BuildRequest(),
+        BuildProvider({ verificationStatus: VerificationStatus.Rejected }),
+        verificationRequired,
+      );
+
+      await expect(
+        service.Create('provider-owner-1', {
+          requestId: 'request-1',
+          providerId: 'provider-1',
+          priceMin: '3000',
+          priceMax: '6000',
+          estimatedDuration: '2 days',
+          partsType: PartsType.Original,
+        }),
+      ).rejects.toBeInstanceOf(DomainForbiddenException);
+      expect(offersRepository.Create).not.toHaveBeenCalled();
+    }
   });
 });

@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { ProviderRepository } from './repositories/provider.repository';
 import { ProviderCategoryRepository } from './repositories/provider-category.repository';
@@ -20,6 +21,7 @@ import { DomainNotFoundException } from '../../common/exceptions/not-found.excep
 import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
 import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 import { GEOCODING_SERVICE } from '../../common/constants/di-tokens';
+import { verificationConfig } from '../../config/verification.config';
 
 @Injectable()
 export class ProvidersService implements IProvidersService {
@@ -29,6 +31,8 @@ export class ProvidersService implements IProvidersService {
     private readonly citiesService: CitiesService,
     @Inject(GEOCODING_SERVICE)
     private readonly geocodingService: IGeocodingService,
+    @Inject(verificationConfig.KEY)
+    private readonly verification: ConfigType<typeof verificationConfig>,
     @InjectPinoLogger(ProvidersService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -137,20 +141,43 @@ export class ProvidersService implements IProvidersService {
     return provider;
   }
 
-  List(
+  async List(
     filter: ListProvidersFilter,
     page: number,
     limit: number,
   ): Promise<PaginatedResult<Provider>> {
-    return this.providerRepository.List(filter, page, limit);
+    const result = await this.providerRepository.List(filter, page, limit);
+    this.logger.info(
+      {
+        ...filter,
+        page,
+        limit,
+        total: result.total,
+        verificationRequired: this.verification.required,
+      },
+      'Providers listed',
+    );
+    return result;
   }
 
   CountByVerificationStatus(): Promise<Record<VerificationStatus, number>> {
     return this.providerRepository.CountByVerificationStatus();
   }
 
-  FindCategoryIdsForOwner(ownerUserId: string): Promise<string[]> {
-    return this.providerCategoryRepository.ListCategoryIdsForOwner(ownerUserId);
+  async FindCategoryIdsForOwner(ownerUserId: string): Promise<string[]> {
+    const categoryIds =
+      await this.providerCategoryRepository.ListCategoryIdsForOwner(
+        ownerUserId,
+      );
+    this.logger.info(
+      {
+        ownerUserId,
+        categoryCount: categoryIds.length,
+        verificationRequired: this.verification.required,
+      },
+      'Provider owner serviced categories resolved',
+    );
+    return categoryIds;
   }
 
   async UpdateRatingStats(

@@ -1,11 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Transactional } from 'typeorm-transactional';
 import { OffersRepository } from './offers.repository';
 import { Offer } from './entities/offer.entity';
 import { OfferStatus } from './offers.types';
 import type { CreateOfferInput, ListOffersFilter } from './offers.types';
-import { VerificationStatus } from '../providers/providers.types';
+import {
+  IsEligibleVerificationStatus,
+  VerificationStatus,
+} from '../providers/providers.types';
+import { verificationConfig } from '../../config/verification.config';
 import { RequestStatus } from '../repair-requests/repair-requests.types';
 import { IOffersService } from './offers.service.interface';
 import { OfferStatusTransitions } from './state/offer-status.transitions';
@@ -27,6 +32,8 @@ export class OffersService implements IOffersService {
     private readonly repairRequestsService: RepairRequestsService,
     private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
+    @Inject(verificationConfig.KEY)
+    private readonly verification: ConfigType<typeof verificationConfig>,
     @InjectPinoLogger(OffersService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -38,7 +45,7 @@ export class OffersService implements IOffersService {
   ): Promise<Offer> {
     const provider = await this.providersService.FindById(input.providerId);
     this.EnsureProviderOwnership(provider.ownerUserId, providerOwnerId);
-    this.EnsureProviderVerified(provider.verificationStatus);
+    this.EnsureProviderEligible(provider.verificationStatus);
 
     const request = await this.repairRequestsService.FindById(input.requestId);
     this.EnsureAcceptingOffers(request.status);
@@ -79,6 +86,7 @@ export class OffersService implements IOffersService {
         offerId: offer.id,
         requestId: input.requestId,
         providerId: input.providerId,
+        verificationRequired: this.verification.required,
       },
       'Offer submitted',
     );
@@ -220,10 +228,22 @@ export class OffersService implements IOffersService {
     }
   }
 
-  private EnsureProviderVerified(
+  private EnsureProviderEligible(
     verificationStatus: VerificationStatus,
   ): void {
-    if (verificationStatus !== VerificationStatus.Verified) {
+    if (
+      !IsEligibleVerificationStatus(
+        verificationStatus,
+        this.verification.required,
+      )
+    ) {
+      this.logger.warn(
+        {
+          verificationStatus,
+          verificationRequired: this.verification.required,
+        },
+        'Offer rejected: provider not eligible',
+      );
       throw new DomainForbiddenException(
         'PROVIDER_NOT_VERIFIED',
         'Your provider profile must be verified before submitting offers',

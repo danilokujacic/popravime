@@ -8,6 +8,7 @@ import { emailConfig } from './email.config';
 import { throttleConfig } from './throttle.config';
 import { geocodingConfig } from './geocoding.config';
 import { oauthConfig } from './oauth.config';
+import { verificationConfig } from './verification.config';
 
 export const ConfigNamespaces = [
   appConfig,
@@ -20,4 +21,5 @@ export const ConfigNamespaces = [
   throttleConfig,
   geocodingConfig,
   oauthConfig,
+  verificationConfig,
 ];

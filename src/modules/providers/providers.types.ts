@@ -4,6 +4,22 @@ export enum VerificationStatus {
   Rejected = 'rejected',
 }
 
+export function IsEligibleVerificationStatus(
+  status: VerificationStatus,
+  required: boolean,
+): boolean {
+  return (
+    status === VerificationStatus.Verified ||
+    (!required && status === VerificationStatus.Pending)
+  );
+}
+
+export function EligibleStatuses(required: boolean): VerificationStatus[] {
+  return required
+    ? [VerificationStatus.Verified]
+    : [VerificationStatus.Verified, VerificationStatus.Pending];
+}
+
 export type Weekday =
   | 'monday'
   | 'tuesday'

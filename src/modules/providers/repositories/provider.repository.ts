@@ -1,13 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type { ConfigType } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { Provider } from '../entities/provider.entity';
-import { ListProvidersFilter, VerificationStatus } from '../providers.types';
+import {
+  EligibleStatuses,
+  ListProvidersFilter,
+  VerificationStatus,
+} from '../providers.types';
 import { PaginatedResult } from '../../../common/interfaces/paginated-result.interface';
 import {
   IsQueryFailedError,
   PersistenceErrorMapper,
 } from '../../../database/persistence-error.mapper';
+import { verificationConfig } from '../../../config/verification.config';
 
 const CATEGORY_EXISTS_CLAUSE = `(:categoryId::uuid IS NULL OR EXISTS (
   SELECT 1 FROM provider_categories pc
@@ -19,6 +25,8 @@ export class ProviderRepository {
   constructor(
     @InjectRepository(Provider)
     private readonly repository: Repository<Provider>,
+    @Inject(verificationConfig.KEY)
+    private readonly config: ConfigType<typeof verificationConfig>,
   ) {}
 
   async List(
@@ -40,8 +48,8 @@ export class ProviderRepository {
           search: filter.search ? `%${filter.search}%` : null,
         },
       )
-      .andWhere('provider.verificationStatus = :verificationStatus', {
-        verificationStatus: VerificationStatus.Verified,
+      .andWhere('provider.verificationStatus = ANY(:eligibleStatuses)', {
+        eligibleStatuses: EligibleStatuses(this.config.required),
       })
       .orderBy('provider.businessName', 'ASC')
       .skip((page - 1) * limit)
