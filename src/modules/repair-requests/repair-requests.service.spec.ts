@@ -3,6 +3,9 @@ import { RepairRequestsRepository } from './repair-requests.repository';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { ProvidersService } from '../providers/providers.service';
+import { CategoriesService } from '../categories/categories.service';
+import { CitiesService } from '../cities/cities.service';
 import { RepairRequest } from './entities/repair-request.entity';
 import { RequestStatus, Urgency } from './repair-requests.types';
 import { UserRole } from '../users/users.types';
@@ -52,11 +55,25 @@ function BuildService(request: RepairRequest) {
     Notify: jest.fn(),
   } as unknown as NotificationsService;
   const auditLogsService = { Log: jest.fn() } as unknown as AuditLogsService;
+  const providersService = {
+    ListEligibleForCategory: jest.fn().mockResolvedValue([]),
+  } as unknown as ProvidersService;
+  const categoriesService = {
+    FindById: jest
+      .fn()
+      .mockResolvedValue({ id: 'category-1', name: 'Mobile phones' }),
+  } as unknown as CategoriesService;
+  const citiesService = {
+    FindById: jest.fn().mockResolvedValue({ id: 'city-1', name: 'Podgorica' }),
+  } as unknown as CitiesService;
+  const app = {
+    frontendUrl: 'http://localhost:3000',
+  } as unknown as ConstructorParameters<typeof RepairRequestsService>[8];
 
   const logger = {
     info: jest.fn(),
     warn: jest.fn(),
-  } as unknown as ConstructorParameters<typeof RepairRequestsService>[5];
+  } as unknown as ConstructorParameters<typeof RepairRequestsService>[9];
 
   const service = new RepairRequestsService(
     repairRequestsRepository,
@@ -64,6 +81,10 @@ function BuildService(request: RepairRequest) {
     usersService,
     notificationsService,
     auditLogsService,
+    providersService,
+    categoriesService,
+    citiesService,
+    app,
     logger,
   );
 
@@ -72,6 +93,7 @@ function BuildService(request: RepairRequest) {
     repairRequestsRepository,
     notificationsService,
     auditLogsService,
+    providersService,
   };
 }
 
@@ -251,6 +273,68 @@ describe('RepairRequestsService.Approve / Reject', () => {
     await service.Approve('request-1', 'admin-1');
 
     expect(notificationsService.Notify).toHaveBeenCalled();
+  });
+
+  it('notifies each eligible provider in the category once approved', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.PendingReview,
+      categoryId: 'category-1',
+      cityId: 'city-1',
+    });
+    const { service, notificationsService, providersService } =
+      BuildService(request);
+    (providersService.ListEligibleForCategory as jest.Mock).mockResolvedValue([
+      {
+        ownerUserId: 'owner-1',
+        businessName: 'Servis A',
+        ownerUser: {
+          id: 'owner-1',
+          email: 'a@example.com',
+          fullName: 'Owner A',
+        },
+      },
+      {
+        ownerUserId: 'owner-2',
+        businessName: 'Servis B',
+        ownerUser: {
+          id: 'owner-2',
+          email: 'b@example.com',
+          fullName: 'Owner B',
+        },
+      },
+    ]);
+
+    await service.Approve('request-1', 'admin-1');
+
+    expect(providersService.ListEligibleForCategory).toHaveBeenCalledWith(
+      'category-1',
+    );
+    // One call for the customer's own status-change notification, plus one per eligible provider.
+    expect(notificationsService.Notify).toHaveBeenCalledTimes(3);
+    expect(notificationsService.Notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'owner-1',
+        type: 'new_repair_request',
+        email: expect.objectContaining({
+          kind: 'new-repair-request',
+          payload: expect.objectContaining({
+            to: 'a@example.com',
+            previewUrl: 'http://localhost:3000/provider/requests/request-1',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('does not notify providers when a request is rejected', async () => {
+    const request = BuildRequest({ status: RequestStatus.PendingReview });
+    const { service, notificationsService, providersService } =
+      BuildService(request);
+
+    await service.Reject('request-1', 'admin-1');
+
+    expect(providersService.ListEligibleForCategory).not.toHaveBeenCalled();
+    expect(notificationsService.Notify).toHaveBeenCalledTimes(1);
   });
 });
 

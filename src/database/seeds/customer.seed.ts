@@ -13,8 +13,8 @@ export async function SeedCustomer(dataSource: DataSource): Promise<void> {
   const passwordHash = await passwordHasher.Hash(CUSTOMER_PASSWORD);
 
   await dataSource.query(
-    `INSERT INTO "users" ("email", "password_hash", "full_name", "phone", "role")
-     VALUES ($1, $2, $3, $4, 'customer')
+    `INSERT INTO "users" ("email", "password_hash", "full_name", "phone", "role", "email_verified")
+     VALUES ($1, $2, $3, $4, 'customer', true)
      ON CONFLICT ("email") DO NOTHING`,
     [CUSTOMER_EMAIL, passwordHash, CUSTOMER_FULL_NAME, CUSTOMER_PHONE],
   );

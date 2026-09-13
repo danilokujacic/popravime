@@ -1,6 +1,8 @@
 import { Offer } from './entities/offer.entity';
 import { CreateOfferInput, ListOffersFilter } from './offers.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
+import { CustomerContactDto } from './dto/customer-contact.dto';
 
 export interface IOffersService {
   Create(providerOwnerId: string, input: CreateOfferInput): Promise<Offer>;
@@ -13,4 +15,15 @@ export interface IOffersService {
     page: number,
     limit: number,
   ): Promise<PaginatedResult<Offer>>;
+  ListForViewer(
+    filter: ListOffersFilter,
+    viewer: AuthenticatedUser,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedResult<Offer>>;
+  FindByIdForViewer(id: string, viewer: AuthenticatedUser): Promise<Offer>;
+  ResolveCustomerContactForOffer(
+    offer: Offer,
+    viewer: AuthenticatedUser,
+  ): Promise<CustomerContactDto | null>;
 }

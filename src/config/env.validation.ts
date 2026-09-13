@@ -20,6 +20,10 @@ export const EnvValidationSchema = Joi.object({
         }),
       otherwise: Joi.string().optional(),
     }),
+  // Base URL of the frontend app — used to build deep links in emails (see app.config.ts, which
+  // trims any trailing slash). No strict URI validation: a wrong value degrades to a broken
+  // link, not a security issue.
+  FRONTEND_URL: Joi.string().default('http://localhost:3000'),
 
   DATABASE_HOST: Joi.string().required(),
   DATABASE_PORT: Joi.number().port().default(5432),
@@ -85,4 +89,8 @@ export const EnvValidationSchema = Joi.object({
   OAUTH_EXCHANGE_CODE_TTL_SECONDS: Joi.number().default(60),
 
   VERIFICATION_REQUIRED: Joi.boolean().default(true),
+
+  // How long a POST /auth/register or /auth/resend-confirmation email-confirmation link stays
+  // valid. Default 24h.
+  EMAIL_CONFIRMATION_TTL_SECONDS: Joi.number().default(86400),
 });

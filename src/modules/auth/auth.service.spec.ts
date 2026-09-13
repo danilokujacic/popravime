@@ -1,12 +1,16 @@
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
+import { EmailConfirmationsService } from '../email-confirmations/email-confirmations.service';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { OAuthProvider, UserRole } from '../users/users.types';
 import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 import { DomainUnauthorizedException } from '../../common/exceptions/unauthorized.exception';
+import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
+import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 
 function BuildService(overrides?: {
   usersService?: Partial<UsersService>;
+  emailConfirmationsService?: Partial<EmailConfirmationsService>;
   passwordHasher?: Partial<PasswordHasher>;
   refreshTokenDenylistService?: Record<string, jest.Mock>;
 }) {
@@ -16,8 +20,17 @@ function BuildService(overrides?: {
     FindCredentials: jest.fn(),
     FindOAuthMatch: jest.fn(),
     CreateOAuthUser: jest.fn(),
+    MarkEmailVerified: jest.fn(),
     ...overrides?.usersService,
   } as unknown as UsersService;
+
+  const emailConfirmationsService = {
+    Create: jest
+      .fn()
+      .mockResolvedValue({ slug: 'a-slug', expiresAt: new Date() }),
+    Confirm: jest.fn(),
+    ...overrides?.emailConfirmationsService,
+  } as unknown as EmailConfirmationsService;
 
   const passwordHasher = {
     Verify: jest.fn(),
@@ -26,17 +39,17 @@ function BuildService(overrides?: {
 
   const jwtService = {
     signAsync: jest.fn().mockResolvedValue('signed-token'),
-  } as unknown as ConstructorParameters<typeof AuthService>[2];
+  } as unknown as ConstructorParameters<typeof AuthService>[3];
 
   const emailQueueService = {
     Enqueue: jest.fn().mockResolvedValue(undefined),
-  } as unknown as ConstructorParameters<typeof AuthService>[3];
+  } as unknown as ConstructorParameters<typeof AuthService>[4];
 
   const refreshTokenDenylistService = {
     Revoke: jest.fn().mockResolvedValue(undefined),
     IsRevoked: jest.fn().mockResolvedValue(false),
     ...overrides?.refreshTokenDenylistService,
-  } as unknown as ConstructorParameters<typeof AuthService>[4];
+  } as unknown as ConstructorParameters<typeof AuthService>[5];
 
   const config = {
     accessSecret: 'access-secret',
@@ -45,25 +58,33 @@ function BuildService(overrides?: {
     refreshExpiresInSeconds: 604800,
   };
 
+  const app = {
+    frontendUrl: 'http://localhost:3000',
+  } as unknown as ConstructorParameters<typeof AuthService>[7];
+
   const logger = {
     warn: jest.fn(),
     info: jest.fn(),
-  } as unknown as ConstructorParameters<typeof AuthService>[6];
+  } as unknown as ConstructorParameters<typeof AuthService>[8];
 
   const service = new AuthService(
     usersService,
+    emailConfirmationsService,
     passwordHasher,
     jwtService,
     emailQueueService,
     refreshTokenDenylistService,
     config,
+    app,
     logger,
   );
 
   return {
     service,
     usersService,
+    emailConfirmationsService,
     passwordHasher,
+    emailQueueService,
     refreshTokenDenylistService,
   };
 }
@@ -89,8 +110,13 @@ describe('AuthService', () => {
       expect(usersService.Register).not.toHaveBeenCalled();
     });
 
-    it('issues a token pair when registration succeeds', async () => {
-      const { service, usersService } = BuildService({
+    it('creates an unverified account and emails a confirmation link instead of logging in', async () => {
+      const {
+        service,
+        usersService,
+        emailConfirmationsService,
+        emailQueueService,
+      } = BuildService({
         usersService: {
           Register: jest.fn().mockResolvedValue({
             id: 'user-1',
@@ -109,10 +135,19 @@ describe('AuthService', () => {
       });
 
       expect(usersService.Register).toHaveBeenCalled();
-      expect(result).toEqual({
-        accessToken: 'signed-token',
-        refreshToken: 'signed-token',
-      });
+      expect(emailConfirmationsService.Create).toHaveBeenCalledWith(
+        'ana@popravime.me',
+      );
+      expect(emailQueueService.Enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'email-confirmation',
+          payload: expect.objectContaining({
+            to: 'ana@popravime.me',
+            confirmUrl: 'http://localhost:3000/confirm-email/a-slug',
+          }),
+        }),
+      );
+      expect(result).toEqual({ email: 'ana@popravime.me' });
     });
   });
 
@@ -138,6 +173,7 @@ describe('AuthService', () => {
             email: 'ana@popravime.me',
             passwordHash: 'hashed',
             role: UserRole.Customer,
+            emailVerified: true,
           }),
         },
         passwordHasher: { Verify: jest.fn().mockResolvedValue(false) },
@@ -151,7 +187,7 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(DomainUnauthorizedException);
     });
 
-    it('issues a token pair when credentials are valid', async () => {
+    it('rejects login for a correct password on an unverified email', async () => {
       const { service } = BuildService({
         usersService: {
           FindCredentials: jest.fn().mockResolvedValue({
@@ -159,6 +195,29 @@ describe('AuthService', () => {
             email: 'ana@popravime.me',
             passwordHash: 'hashed',
             role: UserRole.Customer,
+            emailVerified: false,
+          }),
+        },
+        passwordHasher: { Verify: jest.fn().mockResolvedValue(true) },
+      });
+
+      await expect(
+        service.Login({
+          email: 'ana@popravime.me',
+          password: 'password123',
+        }),
+      ).rejects.toBeInstanceOf(DomainForbiddenException);
+    });
+
+    it('issues a token pair when credentials are valid and the email is verified', async () => {
+      const { service } = BuildService({
+        usersService: {
+          FindCredentials: jest.fn().mockResolvedValue({
+            id: 'user-1',
+            email: 'ana@popravime.me',
+            passwordHash: 'hashed',
+            role: UserRole.Customer,
+            emailVerified: true,
           }),
         },
         passwordHasher: { Verify: jest.fn().mockResolvedValue(true) },
@@ -173,6 +232,88 @@ describe('AuthService', () => {
         accessToken: 'signed-token',
         refreshToken: 'signed-token',
       });
+    });
+  });
+
+  describe('ConfirmEmail', () => {
+    it('marks the email verified and issues a token pair', async () => {
+      const { service, usersService, emailConfirmationsService } = BuildService(
+        {
+          emailConfirmationsService: {
+            Confirm: jest.fn().mockResolvedValue('ana@popravime.me'),
+          },
+          usersService: {
+            MarkEmailVerified: jest.fn().mockResolvedValue({
+              id: 'user-1',
+              email: 'ana@popravime.me',
+              role: UserRole.Customer,
+            }),
+          },
+        },
+      );
+
+      const result = await service.ConfirmEmail('a-slug');
+
+      expect(emailConfirmationsService.Confirm).toHaveBeenCalledWith('a-slug');
+      expect(usersService.MarkEmailVerified).toHaveBeenCalledWith(
+        'ana@popravime.me',
+      );
+      expect(result).toEqual({
+        accessToken: 'signed-token',
+        refreshToken: 'signed-token',
+      });
+    });
+  });
+
+  describe('ResendConfirmation', () => {
+    it('rejects an unknown email', async () => {
+      const { service } = BuildService({
+        usersService: { FindByEmail: jest.fn().mockResolvedValue(null) },
+      });
+
+      await expect(
+        service.ResendConfirmation('unknown@popravime.me'),
+      ).rejects.toBeInstanceOf(DomainNotFoundException);
+    });
+
+    it('rejects an already-verified email', async () => {
+      const { service } = BuildService({
+        usersService: {
+          FindByEmail: jest.fn().mockResolvedValue({
+            id: 'user-1',
+            email: 'ana@popravime.me',
+            fullName: 'Ana Petrović',
+            emailVerified: true,
+          }),
+        },
+      });
+
+      await expect(
+        service.ResendConfirmation('ana@popravime.me'),
+      ).rejects.toBeInstanceOf(DomainConflictException);
+    });
+
+    it('sends a fresh confirmation link for an unverified account', async () => {
+      const { service, emailConfirmationsService, emailQueueService } =
+        BuildService({
+          usersService: {
+            FindByEmail: jest.fn().mockResolvedValue({
+              id: 'user-1',
+              email: 'ana@popravime.me',
+              fullName: 'Ana Petrović',
+              emailVerified: false,
+            }),
+          },
+        });
+
+      await service.ResendConfirmation('ana@popravime.me');
+
+      expect(emailConfirmationsService.Create).toHaveBeenCalledWith(
+        'ana@popravime.me',
+      );
+      expect(emailQueueService.Enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'email-confirmation' }),
+      );
     });
   });
 

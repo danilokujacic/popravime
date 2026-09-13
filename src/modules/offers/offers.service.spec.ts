@@ -14,6 +14,7 @@ import { Provider } from '../providers/entities/provider.entity';
 import { User } from '../users/entities/user.entity';
 import { RepairRequest } from '../repair-requests/entities/repair-request.entity';
 import { RequestStatus } from '../repair-requests/repair-requests.types';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 
 function BuildOffer(overrides?: Partial<Offer>): Offer {
   return {
@@ -42,8 +43,13 @@ function BuildProvider(overrides?: Partial<Provider>): Provider {
   } as Provider;
 }
 
-function BuildUser(id: string, email: string, fullName: string): User {
-  return { id, email, fullName, role: UserRole.Customer } as User;
+function BuildUser(
+  id: string,
+  email: string,
+  fullName: string,
+  phone: string | null = null,
+): User {
+  return { id, email, fullName, phone, role: UserRole.Customer } as User;
 }
 
 describe('OffersService.Accept', () => {
@@ -77,12 +83,17 @@ describe('OffersService.Accept', () => {
           .mockResolvedValue({ id: 'request-1', customerId: 'customer-1' }),
     } as unknown as RepairRequestsService;
 
+    const users = new Map<string, User>([
+      [
+        'provider-owner-1',
+        BuildUser('provider-owner-1', 'owner@popravime.me', 'Provider Owner'),
+      ],
+      ['customer-1', BuildUser('customer-1', 'kupac@popravime.me', 'Kupac')],
+    ]);
     const usersService = {
       FindById: jest
         .fn()
-        .mockResolvedValue(
-          BuildUser('provider-owner-1', 'owner@popravime.me', 'Provider Owner'),
-        ),
+        .mockImplementation((id: string) => Promise.resolve(users.get(id))),
     } as unknown as UsersService;
 
     const notificationsService = {
@@ -91,12 +102,16 @@ describe('OffersService.Accept', () => {
 
     const verification = {
       required: true,
-    } as unknown as ConstructorParameters<typeof OffersService>[5];
+    };
+
+    const app = {
+      frontendUrl: 'http://localhost:3000',
+    } as unknown as ConstructorParameters<typeof OffersService>[6];
 
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof OffersService>[6];
+    } as unknown as ConstructorParameters<typeof OffersService>[7];
 
     const service = new OffersService(
       offersRepository,
@@ -105,6 +120,7 @@ describe('OffersService.Accept', () => {
       usersService,
       notificationsService,
       verification,
+      app,
       logger,
     );
 
@@ -145,7 +161,35 @@ describe('OffersService.Accept', () => {
     ]);
     expect(notificationsService.Notify).toHaveBeenCalledWith(
       expect.objectContaining({
-        email: expect.objectContaining({ kind: 'offer-accepted' }),
+        userId: 'provider-owner-1',
+        email: expect.objectContaining({
+          kind: 'offer-accepted',
+          payload: expect.objectContaining({
+            to: 'owner@popravime.me',
+            customerName: 'Kupac',
+            customerEmail: 'kupac@popravime.me',
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('emails the customer their provider’s contact info too, not just the provider', async () => {
+    const { service, notificationsService } = BuildService();
+
+    await service.Accept('offer-1', 'customer-1');
+
+    expect(notificationsService.Notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'customer-1',
+        type: 'offer_accepted_confirmation',
+        email: expect.objectContaining({
+          kind: 'offer-accepted-customer',
+          payload: expect.objectContaining({
+            to: 'kupac@popravime.me',
+            providerName: 'Ana Repair',
+          }),
+        }),
       }),
     );
   });
@@ -232,12 +276,16 @@ describe('OffersService.Create', () => {
 
     const verification = {
       required: verificationRequired,
-    } as unknown as ConstructorParameters<typeof OffersService>[5];
+    };
+
+    const app = {
+      frontendUrl: 'http://localhost:3000',
+    } as unknown as ConstructorParameters<typeof OffersService>[6];
 
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof OffersService>[6];
+    } as unknown as ConstructorParameters<typeof OffersService>[7];
 
     const service = new OffersService(
       offersRepository,
@@ -246,10 +294,16 @@ describe('OffersService.Create', () => {
       usersService,
       notificationsService,
       verification,
+      app,
       logger,
     );
 
-    return { service, repairRequestsService, notificationsService, offersRepository };
+    return {
+      service,
+      repairRequestsService,
+      notificationsService,
+      offersRepository,
+    };
   }
 
   it('creates the offer and marks the request as offers_received', async () => {
@@ -351,5 +405,267 @@ describe('OffersService.Create', () => {
       ).rejects.toBeInstanceOf(DomainForbiddenException);
       expect(offersRepository.Create).not.toHaveBeenCalled();
     }
+  });
+});
+
+function BuildViewer(
+  overrides?: Partial<AuthenticatedUser>,
+): AuthenticatedUser {
+  return {
+    id: 'viewer-1',
+    email: 'viewer@popravime.me',
+    role: UserRole.Admin,
+    ...overrides,
+  };
+}
+
+describe('OffersService viewer scoping', () => {
+  function BuildService(overrides?: {
+    offer?: Offer;
+    request?: RepairRequest;
+    viewerProvider?: Provider;
+  }) {
+    const offer = overrides?.offer ?? BuildOffer({ providerId: 'provider-1' });
+    const request =
+      overrides?.request ?? BuildRequest({ customerId: 'customer-1' });
+    const viewerProvider =
+      overrides?.viewerProvider ?? BuildProvider({ id: 'provider-1' });
+
+    const offersRepository = {
+      FindById: jest.fn().mockResolvedValue(offer),
+      List: jest
+        .fn()
+        .mockResolvedValue({ items: [offer], total: 1, page: 1, limit: 10 }),
+    } as unknown as OffersRepository;
+
+    const providersService = {
+      GetForUser: jest.fn().mockResolvedValue(viewerProvider),
+    } as unknown as ProvidersService;
+
+    const repairRequestsService = {
+      FindById: jest.fn().mockResolvedValue(request),
+    } as unknown as RepairRequestsService;
+
+    const usersService = {
+      FindById: jest
+        .fn()
+        .mockResolvedValue(
+          BuildUser(
+            'customer-1',
+            'kupac@popravime.me',
+            'Kupac',
+            '+38267000000',
+          ),
+        ),
+    } as unknown as UsersService;
+
+    const notificationsService = {} as unknown as NotificationsService;
+    const verification = { required: true };
+    const app = {
+      frontendUrl: 'http://localhost:3000',
+    } as unknown as ConstructorParameters<typeof OffersService>[6];
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof OffersService>[7];
+
+    const service = new OffersService(
+      offersRepository,
+      providersService,
+      repairRequestsService,
+      usersService,
+      notificationsService,
+      verification,
+      app,
+      logger,
+    );
+
+    return { service, offersRepository, providersService, offer, request };
+  }
+
+  describe('ListForViewer', () => {
+    it('passes the filter through unchanged for an admin', async () => {
+      const { service, offersRepository } = BuildService();
+
+      await service.ListForViewer(
+        { requestId: 'request-1' },
+        BuildViewer(),
+        1,
+        10,
+      );
+
+      expect(offersRepository.List).toHaveBeenCalledWith(
+        { requestId: 'request-1' },
+        1,
+        10,
+      );
+    });
+
+    it("forces providerId to the viewer's own provider, ignoring any other providerId requested", async () => {
+      const { service, offersRepository } = BuildService({
+        viewerProvider: BuildProvider({ id: 'my-provider' }),
+      });
+
+      await service.ListForViewer(
+        { providerId: 'someone-elses-provider' },
+        BuildViewer({ id: 'provider-owner-1', role: UserRole.ProviderOwner }),
+        1,
+        10,
+      );
+
+      expect(offersRepository.List).toHaveBeenCalledWith(
+        expect.objectContaining({ providerId: 'my-provider' }),
+        1,
+        10,
+      );
+    });
+
+    it('rejects a customer listing offers without a request_id', async () => {
+      const { service } = BuildService();
+
+      await expect(
+        service.ListForViewer(
+          {},
+          BuildViewer({ id: 'customer-1', role: UserRole.Customer }),
+          1,
+          10,
+        ),
+      ).rejects.toBeInstanceOf(DomainForbiddenException);
+    });
+
+    it("rejects a customer listing offers for a request they don't own", async () => {
+      const { service } = BuildService({
+        request: BuildRequest({ customerId: 'someone-else' }),
+      });
+
+      await expect(
+        service.ListForViewer(
+          { requestId: 'request-1' },
+          BuildViewer({ id: 'customer-1', role: UserRole.Customer }),
+          1,
+          10,
+        ),
+      ).rejects.toBeInstanceOf(DomainForbiddenException);
+    });
+
+    it('lets a customer list offers for their own request', async () => {
+      const { service, offersRepository } = BuildService({
+        request: BuildRequest({ customerId: 'customer-1' }),
+      });
+
+      await service.ListForViewer(
+        { requestId: 'request-1' },
+        BuildViewer({ id: 'customer-1', role: UserRole.Customer }),
+        1,
+        10,
+      );
+
+      expect(offersRepository.List).toHaveBeenCalledWith(
+        { requestId: 'request-1' },
+        1,
+        10,
+      );
+    });
+  });
+
+  describe('FindByIdForViewer', () => {
+    it("rejects a provider viewing an offer they don't own", async () => {
+      const { service } = BuildService({
+        offer: BuildOffer({ providerId: 'someone-elses-provider' }),
+        viewerProvider: BuildProvider({ id: 'my-provider' }),
+      });
+
+      await expect(
+        service.FindByIdForViewer(
+          'offer-1',
+          BuildViewer({ id: 'provider-owner-1', role: UserRole.ProviderOwner }),
+        ),
+      ).rejects.toBeInstanceOf(DomainForbiddenException);
+    });
+
+    it('lets a provider view their own offer', async () => {
+      const { service } = BuildService({
+        offer: BuildOffer({ providerId: 'my-provider' }),
+        viewerProvider: BuildProvider({ id: 'my-provider' }),
+      });
+
+      const result = await service.FindByIdForViewer(
+        'offer-1',
+        BuildViewer({ id: 'provider-owner-1', role: UserRole.ProviderOwner }),
+      );
+
+      expect(result.id).toBe('offer-1');
+    });
+
+    it("rejects a customer viewing an offer on a request they don't own", async () => {
+      const { service } = BuildService({
+        request: BuildRequest({ customerId: 'someone-else' }),
+      });
+
+      await expect(
+        service.FindByIdForViewer(
+          'offer-1',
+          BuildViewer({ id: 'customer-1', role: UserRole.Customer }),
+        ),
+      ).rejects.toBeInstanceOf(DomainForbiddenException);
+    });
+  });
+
+  describe('ResolveCustomerContactForOffer', () => {
+    it('returns null for a pending offer regardless of viewer', async () => {
+      const { service, offer } = BuildService({
+        offer: BuildOffer({ status: OfferStatus.Pending }),
+      });
+
+      const result = await service.ResolveCustomerContactForOffer(
+        offer,
+        BuildViewer(),
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null for a customer viewing their own accepted offer', async () => {
+      const { service, offer } = BuildService({
+        offer: BuildOffer({ status: OfferStatus.Accepted }),
+      });
+
+      const result = await service.ResolveCustomerContactForOffer(
+        offer,
+        BuildViewer({ id: 'customer-1', role: UserRole.Customer }),
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it("returns the customer's contact for the provider once accepted", async () => {
+      const { service, offer } = BuildService({
+        offer: BuildOffer({ status: OfferStatus.Accepted }),
+      });
+
+      const result = await service.ResolveCustomerContactForOffer(
+        offer,
+        BuildViewer({ id: 'provider-owner-1', role: UserRole.ProviderOwner }),
+      );
+
+      expect(result).toEqual({
+        fullName: 'Kupac',
+        email: 'kupac@popravime.me',
+        phone: '+38267000000',
+      });
+    });
+
+    it('returns the customer contact for an admin too', async () => {
+      const { service, offer } = BuildService({
+        offer: BuildOffer({ status: OfferStatus.Accepted }),
+      });
+
+      const result = await service.ResolveCustomerContactForOffer(
+        offer,
+        BuildViewer(),
+      );
+
+      expect(result?.email).toBe('kupac@popravime.me');
+    });
   });
 });

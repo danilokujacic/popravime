@@ -180,6 +180,10 @@ export class ProvidersService implements IProvidersService {
     return categoryIds;
   }
 
+  ListEligibleForCategory(categoryId: string): Promise<Provider[]> {
+    return this.providerRepository.ListEligibleForCategory(categoryId);
+  }
+
   async UpdateRatingStats(
     providerId: string,
     stats: UpdateRatingStatsInput,

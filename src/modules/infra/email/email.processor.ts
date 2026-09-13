@@ -9,14 +9,17 @@ import {
   EMAIL_SERVICE,
 } from '../../../common/constants/di-tokens';
 import { BuildWelcomeEmail } from './templates/welcome.template';
+import { BuildEmailConfirmationEmail } from './templates/email-confirmation.template';
 import { BuildOfferReceivedEmail } from './templates/offer-received.template';
 import { BuildOfferAcceptedEmail } from './templates/offer-accepted.template';
+import { BuildOfferAcceptedCustomerEmail } from './templates/offer-accepted-customer.template';
 import { BuildStatusChangeEmail } from './templates/status-change.template';
 import { BuildReviewCreatedEmail } from './templates/review-created.template';
 import { BuildVerificationApprovedEmail } from './templates/verification-approved.template';
 import { BuildVerificationRejectedEmail } from './templates/verification-rejected.template';
 import { BuildNewMessageEmail } from './templates/new-message.template';
 import { BuildNewInquiryEmail } from './templates/new-inquiry.template';
+import { BuildNewRepairRequestEmail } from './templates/new-repair-request.template';
 
 interface EmailContent {
   to: string;
@@ -28,10 +31,20 @@ function BuildContent(job: EmailJob): EmailContent {
   switch (job.kind) {
     case 'welcome':
       return { to: job.payload.to, ...BuildWelcomeEmail(job.payload) };
+    case 'email-confirmation':
+      return {
+        to: job.payload.to,
+        ...BuildEmailConfirmationEmail(job.payload),
+      };
     case 'offer-received':
       return { to: job.payload.to, ...BuildOfferReceivedEmail(job.payload) };
     case 'offer-accepted':
       return { to: job.payload.to, ...BuildOfferAcceptedEmail(job.payload) };
+    case 'offer-accepted-customer':
+      return {
+        to: job.payload.to,
+        ...BuildOfferAcceptedCustomerEmail(job.payload),
+      };
     case 'status-change':
       return { to: job.payload.to, ...BuildStatusChangeEmail(job.payload) };
     case 'review-created':
@@ -50,6 +63,11 @@ function BuildContent(job: EmailJob): EmailContent {
       return { to: job.payload.to, ...BuildNewMessageEmail(job.payload) };
     case 'new-inquiry':
       return { to: job.payload.to, ...BuildNewInquiryEmail(job.payload) };
+    case 'new-repair-request':
+      return {
+        to: job.payload.to,
+        ...BuildNewRepairRequestEmail(job.payload),
+      };
   }
 }
 

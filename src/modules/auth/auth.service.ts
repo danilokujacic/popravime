@@ -4,10 +4,12 @@ import type { ConfigType } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { UsersService } from '../users/users.service';
+import { EmailConfirmationsService } from '../email-confirmations/email-confirmations.service';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { jwtConfig } from '../../config/jwt.config';
+import { appConfig } from '../../config/app.config';
 import { CreateUserInput, OAuthProfile, UserRole } from '../users/users.types';
-import { LoginInput } from './auth.types';
+import { LoginInput, PendingConfirmationResult } from './auth.types';
 import { TokenPair } from './interfaces/token-pair.interface';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { RefreshTokenSession } from './interfaces/refresh-token-session.interface';
@@ -15,6 +17,8 @@ import { IAuthService } from './auth.service.interface';
 import { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 import { DomainUnauthorizedException } from '../../common/exceptions/unauthorized.exception';
+import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
+import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { EmailQueueService } from '../infra/email/email-queue.service';
 import { RefreshTokenDenylistService } from './refresh-token-denylist.service';
 
@@ -22,17 +26,24 @@ import { RefreshTokenDenylistService } from './refresh-token-denylist.service';
 export class AuthService implements IAuthService {
   constructor(
     private readonly usersService: UsersService,
+    private readonly emailConfirmationsService: EmailConfirmationsService,
     private readonly passwordHasher: PasswordHasher,
     private readonly jwtService: JwtService,
     private readonly emailQueueService: EmailQueueService,
     private readonly refreshTokenDenylistService: RefreshTokenDenylistService,
     @Inject(jwtConfig.KEY)
     private readonly config: ConfigType<typeof jwtConfig>,
+    @Inject(appConfig.KEY)
+    private readonly app: ConfigType<typeof appConfig>,
     @InjectPinoLogger(AuthService.name)
     private readonly logger: PinoLogger,
   ) {}
 
-  async Register(input: CreateUserInput): Promise<TokenPair> {
+  // No tokens back — a plain registration starts unverified (§ emailVerified) and can't log in
+  // yet, so there's no session to hand over until the confirmation link is clicked. OAuth signup
+  // (CompleteOAuthSignup below) is unaffected: the provider already proved the email, so that
+  // path still logs in immediately.
+  async Register(input: CreateUserInput): Promise<PendingConfirmationResult> {
     const existing = await this.usersService.FindByEmail(input.email);
     if (existing) {
       this.logger.warn(
@@ -48,12 +59,9 @@ export class AuthService implements IAuthService {
     const user = await this.usersService.Register(input);
     this.logger.info({ userId: user.id, role: user.role }, 'User registered');
 
-    await this.emailQueueService.Enqueue({
-      kind: 'welcome',
-      payload: { to: user.email, fullName: user.fullName },
-    });
+    await this.SendConfirmationEmail(user.email, user.fullName);
 
-    return this.IssueTokens(user.id, user.email, user.role);
+    return { email: user.email };
   }
 
   async Login(input: LoginInput): Promise<TokenPair> {
@@ -84,6 +92,17 @@ export class AuthService implements IAuthService {
       );
     }
 
+    if (!credentials.emailVerified) {
+      this.logger.warn(
+        { userId: credentials.id },
+        'Login rejected: email not verified',
+      );
+      throw new DomainForbiddenException(
+        'EMAIL_NOT_VERIFIED',
+        'Confirm your email before logging in',
+      );
+    }
+
     this.logger.info({ userId: credentials.id }, 'User logged in');
 
     return this.IssueTokens(
@@ -91,6 +110,48 @@ export class AuthService implements IAuthService {
       credentials.email,
       credentials.role,
     );
+  }
+
+  // The FE page at /confirm-email/:slug posts the slug straight here — a fresh session comes
+  // back so the customer/provider lands on their dashboard immediately rather than having to
+  // separately log in right after confirming.
+  async ConfirmEmail(slug: string): Promise<TokenPair> {
+    const email = await this.emailConfirmationsService.Confirm(slug);
+    const user = await this.usersService.MarkEmailVerified(email);
+    this.logger.info({ userId: user.id }, 'Email confirmed');
+    return this.IssueTokens(user.id, user.email, user.role);
+  }
+
+  async ResendConfirmation(email: string): Promise<void> {
+    const user = await this.usersService.FindByEmail(email);
+    if (!user) {
+      throw new DomainNotFoundException(
+        'USER_NOT_FOUND',
+        'No account with that email',
+      );
+    }
+    if (user.emailVerified) {
+      throw new DomainConflictException(
+        'EMAIL_ALREADY_VERIFIED',
+        'This email is already confirmed',
+      );
+    }
+
+    await this.SendConfirmationEmail(user.email, user.fullName);
+    this.logger.info({ userId: user.id }, 'Confirmation email resent');
+  }
+
+  private async SendConfirmationEmail(
+    email: string,
+    fullName: string,
+  ): Promise<void> {
+    const { slug } = await this.emailConfirmationsService.Create(email);
+    const confirmUrl = `${this.app.frontendUrl}/confirm-email/${slug}`;
+
+    await this.emailQueueService.Enqueue({
+      kind: 'email-confirmation',
+      payload: { to: email, fullName, confirmUrl },
+    });
   }
 
   Refresh(user: AuthenticatedUser): Promise<TokenPair> {

@@ -110,8 +110,10 @@ navigate to is meaningfully different from a `provider_owner`, which is differen
 
 | Method | Path | Auth | Body |
 |---|---|---|---|
-| POST | `/auth/register` | public | `{email, password, repeat_password, full_name, phone?, role}` — `repeat_password` must equal `password` (`400 VALIDATION_ERROR`, field `repeat_password` code `MATCHES_FIELD` otherwise); `role` must be `customer` or `provider_owner` (not `admin`) |
-| POST | `/auth/login` | public | `{email, password}` |
+| POST | `/auth/register` | public | `{email, password, repeat_password, full_name, phone?, role}` — `repeat_password` must equal `password` (`400 VALIDATION_ERROR`, field `repeat_password` code `MATCHES_FIELD` otherwise); `role` must be `customer` or `provider_owner` (not `admin`). Response is `{email}`, **not tokens** — see §2.1.2 |
+| POST | `/auth/confirm-email` | public | `{slug}` → `{access_token, refresh_token}` — see §2.1.2 |
+| POST | `/auth/resend-confirmation` | public, throttled | `{email}` → `204 No Content` — see §2.1.2 |
+| POST | `/auth/login` | public | `{email, password}` → `403 EMAIL_NOT_VERIFIED` if the account is a plain registration that hasn't confirmed yet (see §2.1.2) |
 | POST | `/auth/refresh` | public* | `{refresh_token}` |
 | POST | `/auth/logout` | public* | `{refresh_token}` |
 | GET | `/auth/google` | public | browser navigation (not XHR) — redirects to Google's consent screen |
@@ -124,8 +126,38 @@ navigate to is meaningfully different from a `provider_owner`, which is differen
 *"public" here means no `Authorization` header is checked, but `/refresh` and `/logout` both
 require a valid, unrevoked `refresh_token` in the JSON body — they're not truly anonymous.
 
-`register` and `login` both return `{access_token, refresh_token}` — the frontend is
-immediately authenticated after registration, no email verification step exists (see §9).
+`login`, `confirm-email`, and both OAuth completion endpoints return `{access_token,
+refresh_token}`. **`register` does not** — a plain (non-OAuth) registration now requires
+confirming the email address before the account can log in at all; see §2.1.2. OAuth sign-up
+(`/auth/oauth/complete`) is unaffected — Google/Facebook already proved the email, so that path
+still logs in immediately, same as before.
+
+### 2.1.2 Email confirmation (plain registration only)
+
+New as of this change — a plain (email/password) registration no longer auto-logs-in. OAuth
+sign-up is untouched by any of this (always immediately verified).
+
+1. `POST /auth/register` creates the account (`email_verified: false` internally) and emails a
+   confirmation link, then returns `{email}` — no tokens. Show a "check your inbox" screen with
+   that email echoed back, not a redirect into the app.
+2. The email's link points at `{FRONTEND_URL}/confirm-email/:slug` — a frontend page needs to
+   exist at that route. On mount, it should `POST /auth/confirm-email` with `{slug}` taken from
+   the URL param. Two outcomes:
+   - **Success** → `{access_token, refresh_token}`, same shape as login. Apply them exactly like
+     any other login response (cookie, `/users/me`, redirect to role home) — the user lands
+     signed in, no separate manual login step needed.
+   - **Failure** → `404 EMAIL_CONFIRMATION_NOT_FOUND` (invalid slug, or already used — links are
+     single-use) or `409 EMAIL_CONFIRMATION_EXPIRED` (valid slug, past its TTL). Either way, show
+     an error state with a "resend confirmation email" affordance (see next point) rather than a
+     bare error — don't distinguish the two states to the user beyond that, both need the same
+     recovery action.
+3. `POST /auth/resend-confirmation` with `{email}` issues a fresh link (invalidating any earlier
+   still-outstanding one for that address) and emails it — `204` on success. Errors:
+   `404 USER_NOT_FOUND` (no account with that email) or `409 EMAIL_ALREADY_VERIFIED` (nothing to
+   resend). Surface this both from the confirm-email failure page (step 2) and from the login
+   screen when `403 EMAIL_NOT_VERIFIED` comes back from `POST /auth/login` — that's the other
+   moment a real user hits this: they registered, never clicked the link, and are now trying to
+   log in normally.
 
 ### 2.1.1 Google/Facebook sign-in flow
 
@@ -380,10 +412,22 @@ Response shape: `{id, customer_id, category_id, brand, model, description, photo
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/offers` | any authenticated | paginated; query: `request_id?`, `provider_id?`, `status?` |
-| GET | `/offers/:id` | any authenticated | |
+| GET | `/offers` | any authenticated, scoped — see below | paginated; query: `request_id?`, `provider_id?`, `status?` |
+| GET | `/offers/:id` | any authenticated, scoped — see below | |
 | POST | `/offers` | any authenticated, must own the referenced provider | body below |
 | PATCH | `/offers/:id/status` | any authenticated, must own the relevant side | body: `{status}` |
+
+**Scoping on `GET /offers` and `GET /offers/:id`** (tightened — previously any authenticated
+caller could list/read any offer regardless of who it belonged to, including a provider seeing a
+competitor's pricing on a shared request; that's now closed):
+- `provider_owner`: always scoped to their own provider — any `provider_id` in the query is
+  ignored and silently replaced with the caller's own. `GET /offers/:id` for an offer that isn't
+  theirs returns `403 OFFER_NOT_OWNED`.
+- `customer`: `request_id` is **required** — omitting it returns `403 OFFERS_REQUEST_ID_REQUIRED`,
+  and a `request_id` for a request the caller doesn't own returns `403
+  REPAIR_REQUEST_NOT_OWNED`/`403 OFFER_NOT_OWNED`. A customer sees every offer (any status) on
+  their own request, same as before.
+- `admin`: unrestricted, as before.
 
 **`POST /offers`** body: `{request_id, provider_id, price_min, price_max (both numeric
 strings), estimated_duration, parts_type ("oem"|"aftermarket"), message?}`. The caller must own
@@ -400,19 +444,34 @@ pending offer on the same request** — the frontend should refresh the whole of
 that request after an accept (don't optimistically assume only the one offer changed).
 
 Offer status values: `pending` → `accepted`/`rejected`/`withdrawn` (terminal). Response shape:
-`{id, request_id, provider_id, price_min, price_max, estimated_duration, parts_type, message,
-status, created_at}`.
+`{id, request_id, provider_id, provider, price_min, price_max, estimated_duration, parts_type,
+message, status, created_at, customer_contact}`.
+
+- `provider` is the same shape `GET /providers/:id` returns (business_name, phone, email,
+  website, address, ...) — embedded on every offer, at every status, for any viewer who can see
+  the offer at all. This data is already public (the directory/profile page return it too), so
+  there's no new exposure; it just saves the frontend a second round trip to show who's behind an
+  offer before the customer even accepts it.
+- `customer_contact` (`{full_name, email, phone}`) is `null` except when **both** are true: the
+  offer's `status` is `accepted`, and the viewer is that offer's own provider owner (or an
+  admin) — never present for the customer's own view of their offers (they already know their
+  own info), and never present on a pending/rejected/withdrawn offer.
 
 ### 7.3 The flow the frontend needs to build
 
 1. Customer creates a repair request (with photos).
 2. Provider owners browse open requests (`GET /repair-requests?status=open&category_id=...`)
    and submit offers.
-3. Customer sees incoming offers on their request (`GET /offers?request_id=...`), compares them,
-   accepts one.
-4. Once accepted, both sides get a real-time-ish notification (see §11) and can now message each
-   other (§7.4) — messaging is gated on an accepted offer existing, `POST /messages` on a
-   `request_id` with no accepted offer yet returns `409 NO_ACCEPTED_OFFER`.
+3. Customer sees incoming offers on their request (`GET /offers?request_id=...`), compares them
+   — including each offer's embedded `provider` contact info — and accepts one.
+4. Once accepted: **both sides get an email with the other's contact info right in it** — direct
+   phone/email/website, not just an in-app notification requiring login. Prioritize surfacing
+   `customer_contact`/`provider` prominently on the accepted-offer UI too; the in-app chat (§7.4)
+   still works but contact info is the primary path, not something gated behind opening a
+   conversation. Both also get an in-app notification (see §11) — provider's is `offer_accepted`,
+   customer's is the new `offer_accepted_confirmation`. Messaging itself is still gated on an
+   accepted offer existing — `POST /messages` on a `request_id` with no accepted offer yet
+   returns `409 NO_ACCEPTED_OFFER`.
 5. Customer advances the request through `in_progress` → `completed`.
 6. Once `completed`, the customer can leave a review (§7.5) — exactly one review per request,
    enforced server-side.
@@ -511,13 +570,25 @@ Polling-based (no WebSocket/push — see §11).
 
 Response shape: `{id, user_id, type, title, body, related_entity_type, related_entity_id,
 is_read, created_at}`. `type` is one of: `new_offer`, `offer_accepted`, `status_change`,
-`new_review`, `verification_approved`, `verification_rejected`, `new_message`, `new_inquiry`.
+`new_review`, `verification_approved`, `verification_rejected`, `new_message`, `new_inquiry`,
+`new_repair_request` (provider-facing — sent to every eligible provider in a request's category
+the moment it's approved and becomes visible; `related_entity_id` is the repair request's id, so
+this routes to `/provider/requests/:id` the same way `new_offer` does),
+`offer_accepted_confirmation` (customer-facing counterpart to `offer_accepted` — fired at the
+same moment, `related_entity_id` is the offer's id; §7.2/§7.3 for why this one matters more than
+usual — it's the signal to surface the provider's contact info).
 `related_entity_type`/`related_entity_id` (both nullable) are a hint for deep-linking — e.g. a
 `new_offer` notification's `related_entity_id` is the offer's id, so tapping the notification
 can route straight to that offer/request. The frontend should build a mapping from `type` to
 "where does tapping this notification navigate" using these two fields, plus a simple
 unread-count indicator (count items where `is_read: false` from the list, or track it
 separately — there's no dedicated unread-count endpoint).
+
+`new_repair_request` also sends an email with a direct "view the request" link
+(`{FRONTEND_URL}/provider/requests/:id`) to every eligible provider (verified, or pending when
+verification isn't required — same eligibility the public directory and offer-submission use) —
+not just approval, creation itself doesn't trigger this, since a `pending_review` request isn't
+viewable by providers yet and the link would 403.
 
 ## 10. Public CMS content
 

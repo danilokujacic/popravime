@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Transactional } from 'typeorm-transactional';
 import { RepairRequestsRepository } from './repair-requests.repository';
@@ -21,8 +22,12 @@ import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/notifications.types';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { ProvidersService } from '../providers/providers.service';
+import { CategoriesService } from '../categories/categories.service';
+import { CitiesService } from '../cities/cities.service';
 import { UserRole } from '../users/users.types';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
+import { appConfig } from '../../config/app.config';
 
 const STATUS_CHANGE_NOTIFIABLE = new Set<RequestStatus>([
   RequestStatus.InProgress,
@@ -44,6 +49,11 @@ export class RepairRequestsService implements IRepairRequestsService {
     private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly providersService: ProvidersService,
+    private readonly categoriesService: CategoriesService,
+    private readonly citiesService: CitiesService,
+    @Inject(appConfig.KEY)
+    private readonly app: ConfigType<typeof appConfig>,
     @InjectPinoLogger(RepairRequestsService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -195,6 +205,9 @@ export class RepairRequestsService implements IRepairRequestsService {
     });
 
     await this.NotifyModerationDecision(saved, status);
+    if (status === RequestStatus.Open) {
+      await this.NotifyProvidersOfNewRequest(saved);
+    }
 
     this.logger.info(
       { requestId: id, adminId, status },
@@ -233,6 +246,53 @@ export class RepairRequestsService implements IRepairRequestsService {
         },
       },
     });
+  }
+
+  // Only reachable once a request is Open — pending_review/rejected requests aren't viewable by
+  // providers yet (EnsureViewable throws REPAIR_REQUEST_NOT_MODERATED), so notifying them any
+  // earlier would hand out a preview link that 403s.
+  private async NotifyProvidersOfNewRequest(
+    request: RepairRequest,
+  ): Promise<void> {
+    const [category, city, providers] = await Promise.all([
+      this.categoriesService.FindById(request.categoryId),
+      this.citiesService.FindById(request.cityId),
+      this.providersService.ListEligibleForCategory(request.categoryId),
+    ]);
+
+    const previewUrl = `${this.app.frontendUrl}/provider/requests/${request.id}`;
+
+    await Promise.all(
+      providers.map((provider) =>
+        this.notificationsService.Notify({
+          userId: provider.ownerUserId,
+          type: NotificationType.NewRepairRequest,
+          title: 'New repair request in your category',
+          body: `A new ${category.name} repair request was posted in ${city.name}`,
+          relatedEntityType: 'repair_request',
+          relatedEntityId: request.id,
+          email: {
+            kind: 'new-repair-request',
+            payload: {
+              to: provider.ownerUser.email,
+              providerName: provider.ownerUser.fullName,
+              categoryName: category.name,
+              cityName: city.name,
+              previewUrl,
+            },
+          },
+        }),
+      ),
+    );
+
+    this.logger.info(
+      {
+        requestId: request.id,
+        categoryId: request.categoryId,
+        providerCount: providers.length,
+      },
+      'Providers notified of new repair request',
+    );
   }
 
   private EnsureModerationTransition(

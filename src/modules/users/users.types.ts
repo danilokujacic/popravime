@@ -27,6 +27,7 @@ export interface UserCredentials {
   email: string;
   passwordHash: string;
   role: UserRole;
+  emailVerified: boolean;
 }
 
 export interface OAuthProfile {
