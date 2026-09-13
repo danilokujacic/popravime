@@ -20,7 +20,10 @@ import { AuthTokensDto } from './dto/auth-tokens.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
-import { AUTH_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
+import {
+  AUTH_THROTTLE,
+  REFRESH_THROTTLE,
+} from '../infra/rate-limit/rate-limit.constants';
 import { CurrentRefreshSession } from './decorators/current-refresh-session.decorator';
 import type { RefreshTokenSession } from './interfaces/refresh-token-session.interface';
 import { CurrentOAuthProfile } from './decorators/current-oauth-profile.decorator';
@@ -55,7 +58,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle(AUTH_THROTTLE)
+  @Throttle(REFRESH_THROTTLE)
   @UseGuards(AuthGuard('jwt-refresh'))
   @HttpCode(HttpStatus.OK)
   @Post('refresh')

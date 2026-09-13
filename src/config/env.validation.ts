@@ -58,6 +58,13 @@ export const EnvValidationSchema = Joi.object({
   THROTTLE_DEFAULT_TTL_MS: Joi.number().default(60000),
   THROTTLE_AUTH_LIMIT: Joi.number().default(5),
   THROTTLE_AUTH_TTL_MS: Joi.number().default(60000),
+  // POST /auth/refresh is fired silently on every page load (AuthProvider's session bootstrap)
+  // and again by the frontend's 401-retry interceptor, so it needs a much more generous budget
+  // than login/register — it's protected by a signed refresh JWT already, not a credential-guess
+  // surface, and sharing THROTTLE_AUTH_LIMIT with them was bouncing legitimate users to /login
+  // once they exhausted it just by browsing.
+  THROTTLE_REFRESH_LIMIT: Joi.number().default(30),
+  THROTTLE_REFRESH_TTL_MS: Joi.number().default(60000),
   THROTTLE_CONTACT_MESSAGE_LIMIT: Joi.number().default(3),
   THROTTLE_CONTACT_MESSAGE_TTL_MS: Joi.number().default(60000),
 
