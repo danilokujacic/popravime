@@ -74,7 +74,7 @@ services:
     image: grafana/loki:2.9.8
     networks: [ internal ]
     restart: unless-stopped
-    ports: [ '127.0.0.1:3100:3100' ]
+    ports: [ '127.0.0.1:4201:3100' ]
     command: [ '-config.file=/etc/loki/loki-config.yaml' ]
     volumes:
       - lokidata:/loki
@@ -96,7 +96,7 @@ services:
     depends_on:
       loki:
         condition: service_healthy
-    ports: [ '127.0.0.1:3000:3000' ]
+    ports: [ '127.0.0.1:4200:3000' ]
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}

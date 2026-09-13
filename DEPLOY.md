@@ -37,8 +37,8 @@ termination (see `openspec/changes/mvp-production-readiness/`) are already merge
 2. Firewall: allow only `22` (SSH), `80` (HTTP, for ACME + the HTTPS redirect), and `443`
    (HTTPS). Everything else (Postgres/Redis/MinIO/Loki/Grafana ports the local compose file also
    exposes) should not be reachable from outside the VM — Grafana in particular is reached over
-   an SSH tunnel (`ssh -L 3000:127.0.0.1:3000 you@your-domain.tld`, then
-   `http://localhost:3000` locally), never opened on the firewall.
+   an SSH tunnel (`ssh -L 4200:127.0.0.1:4200 you@your-domain.tld`, then
+   `http://localhost:4200` locally), never opened on the firewall.
 3. Create a non-root deploy user with SSH key auth; disable password SSH login.
 4. Clone the repo onto the VM (or push a built image — either way, `docker-compose.yml` and
    `nginx/nginx.conf` need to be present on the host).
@@ -75,7 +75,7 @@ Once `api` exists in `docker-compose.yml` again (see the gap noted above), give 
     logging:
       driver: loki
       options:
-        loki-url: 'http://127.0.0.1:3100/loki/api/v1/push'
+        loki-url: 'http://127.0.0.1:4201/loki/api/v1/push'
         loki-external-labels: 'job=popravime-api,env=production'
         mode: non-blocking
         max-buffer-size: 4m

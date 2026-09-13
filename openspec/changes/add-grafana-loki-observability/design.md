@@ -47,9 +47,9 @@
 
 ### 1. Grafana + Loki as two new `docker-compose.yml` services, bound to loopback
 Two services, `loki` and `grafana`, each with a persistent named volume (`lokidata`,
-`grafanadata`), ports published as `127.0.0.1:3100:3100` and `127.0.0.1:3000:3000` — the API's
-own port is only reachable through nginx inside the `internal` Docker network and is never
-published to the host, so Grafana's default `3000` is free to use on the loopback interface.
+`grafanadata`), ports published as `127.0.0.1:4201:3100` and `127.0.0.1:4200:3000` (container-
+internal ports unchanged — only the host-side mapping moved, off `3100`/`3000` onto `4201`/`4200`
+after those collided with something already bound on the Hetzner host's loopback interface).
 Grafana is pre-provisioned (via a mounted `grafana/provisioning/datasources/loki.yaml`) with the
 Loki datasource so it works immediately without manual click-ops. Grafana admin credentials come
 from `.env` (`GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`), following the same pattern as every
@@ -62,7 +62,7 @@ hardcoded).
 
 ### 2. Shipping via the Docker Loki logging driver, in non-blocking mode
 The `api` service's `logging:` block is set to the `loki` driver
-(`loki-url: http://127.0.0.1:3100/loki/api/v1/push`, labeled with `job=popravime-api` and the
+(`loki-url: http://127.0.0.1:4201/loki/api/v1/push`, labeled with `job=popravime-api` and the
 environment), installed once on the Hetzner host as a one-time step
 (`docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions`,
 documented in `DEPLOY.md`). Crucially, the driver options include `mode: non-blocking` with a
