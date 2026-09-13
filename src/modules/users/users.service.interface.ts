@@ -15,4 +15,5 @@ export interface IUsersService {
   FindOAuthMatch(profile: OAuthProfile): Promise<User | null>;
   CreateOAuthUser(profile: OAuthProfile, role: UserRole): Promise<User>;
   Update(id: string, input: UpdateUserInput): Promise<User>;
+  MarkEmailVerified(email: string): Promise<User>;
 }

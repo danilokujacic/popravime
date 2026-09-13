@@ -29,6 +29,7 @@ export class UsersService implements IUsersService {
       fullName: input.fullName,
       phone: input.phone ?? null,
       role: input.role,
+      emailVerified: false,
     });
   }
 
@@ -64,6 +65,9 @@ export class UsersService implements IUsersService {
     if (!byEmail.oauthProvider) {
       byEmail.oauthProvider = profile.provider;
       byEmail.oauthId = profile.providerId;
+      // Linking a plain-registration account to an OAuth identity re-proves ownership of the
+      // same email address, even if the original signup's confirmation link was never clicked.
+      byEmail.emailVerified = true;
       return this.usersRepository.Save(byEmail);
     }
     return byEmail;
@@ -81,7 +85,19 @@ export class UsersService implements IUsersService {
       role,
       oauthProvider: profile.provider,
       oauthId: profile.providerId,
+      // The OAuth provider already proved ownership of this email address — no confirmation
+      // link needed.
+      emailVerified: true,
     });
+  }
+
+  async MarkEmailVerified(email: string): Promise<User> {
+    const user = await this.usersRepository.FindByEmail(email);
+    if (!user) {
+      throw new DomainNotFoundException('USER_NOT_FOUND', 'User not found');
+    }
+    user.emailVerified = true;
+    return this.usersRepository.Save(user);
   }
 
   async Update(id: string, input: UpdateUserInput): Promise<User> {

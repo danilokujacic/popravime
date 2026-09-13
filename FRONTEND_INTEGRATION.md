@@ -110,8 +110,10 @@ navigate to is meaningfully different from a `provider_owner`, which is differen
 
 | Method | Path | Auth | Body |
 |---|---|---|---|
-| POST | `/auth/register` | public | `{email, password, repeat_password, full_name, phone?, role}` — `repeat_password` must equal `password` (`400 VALIDATION_ERROR`, field `repeat_password` code `MATCHES_FIELD` otherwise); `role` must be `customer` or `provider_owner` (not `admin`) |
-| POST | `/auth/login` | public | `{email, password}` |
+| POST | `/auth/register` | public | `{email, password, repeat_password, full_name, phone?, role}` — `repeat_password` must equal `password` (`400 VALIDATION_ERROR`, field `repeat_password` code `MATCHES_FIELD` otherwise); `role` must be `customer` or `provider_owner` (not `admin`). Response is `{email}`, **not tokens** — see §2.1.2 |
+| POST | `/auth/confirm-email` | public | `{slug}` → `{access_token, refresh_token}` — see §2.1.2 |
+| POST | `/auth/resend-confirmation` | public, throttled | `{email}` → `204 No Content` — see §2.1.2 |
+| POST | `/auth/login` | public | `{email, password}` → `403 EMAIL_NOT_VERIFIED` if the account is a plain registration that hasn't confirmed yet (see §2.1.2) |
 | POST | `/auth/refresh` | public* | `{refresh_token}` |
 | POST | `/auth/logout` | public* | `{refresh_token}` |
 | GET | `/auth/google` | public | browser navigation (not XHR) — redirects to Google's consent screen |
@@ -124,8 +126,38 @@ navigate to is meaningfully different from a `provider_owner`, which is differen
 *"public" here means no `Authorization` header is checked, but `/refresh` and `/logout` both
 require a valid, unrevoked `refresh_token` in the JSON body — they're not truly anonymous.
 
-`register` and `login` both return `{access_token, refresh_token}` — the frontend is
-immediately authenticated after registration, no email verification step exists (see §9).
+`login`, `confirm-email`, and both OAuth completion endpoints return `{access_token,
+refresh_token}`. **`register` does not** — a plain (non-OAuth) registration now requires
+confirming the email address before the account can log in at all; see §2.1.2. OAuth sign-up
+(`/auth/oauth/complete`) is unaffected — Google/Facebook already proved the email, so that path
+still logs in immediately, same as before.
+
+### 2.1.2 Email confirmation (plain registration only)
+
+New as of this change — a plain (email/password) registration no longer auto-logs-in. OAuth
+sign-up is untouched by any of this (always immediately verified).
+
+1. `POST /auth/register` creates the account (`email_verified: false` internally) and emails a
+   confirmation link, then returns `{email}` — no tokens. Show a "check your inbox" screen with
+   that email echoed back, not a redirect into the app.
+2. The email's link points at `{FRONTEND_URL}/confirm-email/:slug` — a frontend page needs to
+   exist at that route. On mount, it should `POST /auth/confirm-email` with `{slug}` taken from
+   the URL param. Two outcomes:
+   - **Success** → `{access_token, refresh_token}`, same shape as login. Apply them exactly like
+     any other login response (cookie, `/users/me`, redirect to role home) — the user lands
+     signed in, no separate manual login step needed.
+   - **Failure** → `404 EMAIL_CONFIRMATION_NOT_FOUND` (invalid slug, or already used — links are
+     single-use) or `409 EMAIL_CONFIRMATION_EXPIRED` (valid slug, past its TTL). Either way, show
+     an error state with a "resend confirmation email" affordance (see next point) rather than a
+     bare error — don't distinguish the two states to the user beyond that, both need the same
+     recovery action.
+3. `POST /auth/resend-confirmation` with `{email}` issues a fresh link (invalidating any earlier
+   still-outstanding one for that address) and emails it — `204` on success. Errors:
+   `404 USER_NOT_FOUND` (no account with that email) or `409 EMAIL_ALREADY_VERIFIED` (nothing to
+   resend). Surface this both from the confirm-email failure page (step 2) and from the login
+   screen when `403 EMAIL_NOT_VERIFIED` comes back from `POST /auth/login` — that's the other
+   moment a real user hits this: they registered, never clicked the link, and are now trying to
+   log in normally.
 
 ### 2.1.1 Google/Facebook sign-in flow
 

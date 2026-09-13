@@ -22,8 +22,8 @@ export async function SeedProvider(dataSource: DataSource): Promise<void> {
   const passwordHash = await passwordHasher.Hash(PROVIDER_PASSWORD);
 
   const [user] = await dataSource.query<IdRow[]>(
-    `INSERT INTO "users" ("email", "password_hash", "full_name", "role")
-     VALUES ($1, $2, $3, 'provider_owner')
+    `INSERT INTO "users" ("email", "password_hash", "full_name", "role", "email_verified")
+     VALUES ($1, $2, $3, 'provider_owner', true)
      ON CONFLICT ("email") DO UPDATE SET "email" = EXCLUDED."email"
      RETURNING "id"`,
     [PROVIDER_EMAIL, passwordHash, PROVIDER_FULL_NAME],

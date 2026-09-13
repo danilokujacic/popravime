@@ -46,6 +46,12 @@ export class User {
   @Column({ name: 'oauth_id', type: 'text', nullable: true })
   oauthId: string | null;
 
+  // Column has existed since the original migration but was never mapped/used until the email
+  // confirmation flow — OAuth accounts are always created true (the provider already verified
+  // that email), a plain registration starts false and flips true via EmailConfirmationsService.
+  @Column({ name: 'email_verified', type: 'boolean', default: false })
+  emailVerified: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

@@ -48,6 +48,7 @@ export class UsersRepository {
       email: user.email,
       passwordHash: user.passwordHash,
       role: user.role,
+      emailVerified: user.emailVerified,
     };
   }
 

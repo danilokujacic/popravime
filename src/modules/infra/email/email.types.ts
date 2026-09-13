@@ -9,6 +9,13 @@ export interface WelcomeJobPayload {
   fullName: string;
 }
 
+export interface EmailConfirmationJobPayload {
+  to: string;
+  fullName: string;
+  // Full URL, built once when the job is enqueued — see AuthService.
+  confirmUrl: string;
+}
+
 export interface OfferReceivedJobPayload {
   to: string;
   customerName: string;
@@ -87,6 +94,7 @@ export interface NewRepairRequestJobPayload {
 
 export type EmailJob =
   | { kind: 'welcome'; payload: WelcomeJobPayload }
+  | { kind: 'email-confirmation'; payload: EmailConfirmationJobPayload }
   | { kind: 'offer-received'; payload: OfferReceivedJobPayload }
   | { kind: 'offer-accepted'; payload: OfferAcceptedJobPayload }
   | {

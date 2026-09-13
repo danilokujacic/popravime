@@ -89,4 +89,8 @@ export const EnvValidationSchema = Joi.object({
   OAUTH_EXCHANGE_CODE_TTL_SECONDS: Joi.number().default(60),
 
   VERIFICATION_REQUIRED: Joi.boolean().default(true),
+
+  // How long a POST /auth/register or /auth/resend-confirmation email-confirmation link stays
+  // valid. Default 24h.
+  EMAIL_CONFIRMATION_TTL_SECONDS: Joi.number().default(86400),
 });

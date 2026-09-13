@@ -16,6 +16,9 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { OAuthExchangeDto } from './dto/oauth-exchange.dto';
 import { OAuthCompleteDto } from './dto/oauth-complete.dto';
+import { ConfirmEmailDto } from './dto/confirm-email.dto';
+import { ResendConfirmationDto } from './dto/resend-confirmation.dto';
+import { PendingConfirmationDto } from './dto/pending-confirmation.dto';
 import { AuthTokensDto } from './dto/auth-tokens.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -39,7 +42,7 @@ export class AuthController {
   @Public()
   @Throttle(AUTH_THROTTLE)
   @Post('register')
-  Register(@Body() dto: RegisterDto): Promise<AuthTokensDto> {
+  Register(@Body() dto: RegisterDto): Promise<PendingConfirmationDto> {
     return this.authService.Register({
       email: dto.email,
       password: dto.password,
@@ -47,6 +50,22 @@ export class AuthController {
       phone: dto.phone,
       role: dto.role,
     });
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @HttpCode(HttpStatus.OK)
+  @Post('confirm-email')
+  ConfirmEmail(@Body() dto: ConfirmEmailDto): Promise<AuthTokensDto> {
+    return this.authService.ConfirmEmail(dto.slug);
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Post('resend-confirmation')
+  ResendConfirmation(@Body() dto: ResendConfirmationDto): Promise<void> {
+    return this.authService.ResendConfirmation(dto.email);
   }
 
   @Public()

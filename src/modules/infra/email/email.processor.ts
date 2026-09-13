@@ -9,6 +9,7 @@ import {
   EMAIL_SERVICE,
 } from '../../../common/constants/di-tokens';
 import { BuildWelcomeEmail } from './templates/welcome.template';
+import { BuildEmailConfirmationEmail } from './templates/email-confirmation.template';
 import { BuildOfferReceivedEmail } from './templates/offer-received.template';
 import { BuildOfferAcceptedEmail } from './templates/offer-accepted.template';
 import { BuildOfferAcceptedCustomerEmail } from './templates/offer-accepted-customer.template';
@@ -30,6 +31,11 @@ function BuildContent(job: EmailJob): EmailContent {
   switch (job.kind) {
     case 'welcome':
       return { to: job.payload.to, ...BuildWelcomeEmail(job.payload) };
+    case 'email-confirmation':
+      return {
+        to: job.payload.to,
+        ...BuildEmailConfirmationEmail(job.payload),
+      };
     case 'offer-received':
       return { to: job.payload.to, ...BuildOfferReceivedEmail(job.payload) };
     case 'offer-accepted':
