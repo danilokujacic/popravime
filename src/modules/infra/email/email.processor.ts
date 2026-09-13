@@ -17,6 +17,7 @@ import { BuildVerificationApprovedEmail } from './templates/verification-approve
 import { BuildVerificationRejectedEmail } from './templates/verification-rejected.template';
 import { BuildNewMessageEmail } from './templates/new-message.template';
 import { BuildNewInquiryEmail } from './templates/new-inquiry.template';
+import { BuildNewRepairRequestEmail } from './templates/new-repair-request.template';
 
 interface EmailContent {
   to: string;
@@ -50,6 +51,11 @@ function BuildContent(job: EmailJob): EmailContent {
       return { to: job.payload.to, ...BuildNewMessageEmail(job.payload) };
     case 'new-inquiry':
       return { to: job.payload.to, ...BuildNewInquiryEmail(job.payload) };
+    case 'new-repair-request':
+      return {
+        to: job.payload.to,
+        ...BuildNewRepairRequestEmail(job.payload),
+      };
   }
 }
 

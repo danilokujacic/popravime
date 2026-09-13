@@ -59,6 +59,16 @@ export interface NewInquiryJobPayload {
   senderName: string;
 }
 
+export interface NewRepairRequestJobPayload {
+  to: string;
+  providerName: string;
+  categoryName: string;
+  cityName: string;
+  // Full URL, built once when the job is enqueued (config isn't available down in
+  // email.processor.ts's pure template functions) — see RepairRequestsService.
+  previewUrl: string;
+}
+
 export type EmailJob =
   | { kind: 'welcome'; payload: WelcomeJobPayload }
   | { kind: 'offer-received'; payload: OfferReceivedJobPayload }
@@ -68,4 +78,5 @@ export type EmailJob =
   | { kind: 'verification-approved'; payload: VerificationApprovedJobPayload }
   | { kind: 'verification-rejected'; payload: VerificationRejectedJobPayload }
   | { kind: 'new-message'; payload: NewMessageJobPayload }
-  | { kind: 'new-inquiry'; payload: NewInquiryJobPayload };
+  | { kind: 'new-inquiry'; payload: NewInquiryJobPayload }
+  | { kind: 'new-repair-request'; payload: NewRepairRequestJobPayload };

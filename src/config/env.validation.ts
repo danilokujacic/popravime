@@ -20,6 +20,10 @@ export const EnvValidationSchema = Joi.object({
         }),
       otherwise: Joi.string().optional(),
     }),
+  // Base URL of the frontend app — used to build deep links in emails (see app.config.ts, which
+  // trims any trailing slash). No strict URI validation: a wrong value degrades to a broken
+  // link, not a security issue.
+  FRONTEND_URL: Joi.string().default('http://localhost:3000'),
 
   DATABASE_HOST: Joi.string().required(),
   DATABASE_PORT: Joi.number().port().default(5432),

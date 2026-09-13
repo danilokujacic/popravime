@@ -9,6 +9,7 @@ export enum NotificationType {
   VerificationRejected = 'verification_rejected',
   NewMessage = 'new_message',
   NewInquiry = 'new_inquiry',
+  NewRepairRequest = 'new_repair_request',
 }
 
 export interface NotifyInput {

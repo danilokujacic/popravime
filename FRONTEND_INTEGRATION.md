@@ -511,13 +511,22 @@ Polling-based (no WebSocket/push — see §11).
 
 Response shape: `{id, user_id, type, title, body, related_entity_type, related_entity_id,
 is_read, created_at}`. `type` is one of: `new_offer`, `offer_accepted`, `status_change`,
-`new_review`, `verification_approved`, `verification_rejected`, `new_message`, `new_inquiry`.
+`new_review`, `verification_approved`, `verification_rejected`, `new_message`, `new_inquiry`,
+`new_repair_request` (provider-facing — sent to every eligible provider in a request's category
+the moment it's approved and becomes visible; `related_entity_id` is the repair request's id, so
+this routes to `/provider/requests/:id` the same way `new_offer` does).
 `related_entity_type`/`related_entity_id` (both nullable) are a hint for deep-linking — e.g. a
 `new_offer` notification's `related_entity_id` is the offer's id, so tapping the notification
 can route straight to that offer/request. The frontend should build a mapping from `type` to
 "where does tapping this notification navigate" using these two fields, plus a simple
 unread-count indicator (count items where `is_read: false` from the list, or track it
 separately — there's no dedicated unread-count endpoint).
+
+`new_repair_request` also sends an email with a direct "view the request" link
+(`{FRONTEND_URL}/provider/requests/:id`) to every eligible provider (verified, or pending when
+verification isn't required — same eligibility the public directory and offer-submission use) —
+not just approval, creation itself doesn't trigger this, since a `pending_review` request isn't
+viewable by providers yet and the link would 403.
 
 ## 10. Public CMS content
 

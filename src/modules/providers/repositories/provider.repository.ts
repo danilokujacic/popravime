@@ -63,6 +63,19 @@ export class ProviderRepository {
     return this.repository.findOne({ where: { id } });
   }
 
+  // For notifying providers of a new repair request in their category — owner is loaded so the
+  // caller has an email/name to send to without a separate round trip per provider.
+  ListEligibleForCategory(categoryId: string): Promise<Provider[]> {
+    return this.repository
+      .createQueryBuilder('provider')
+      .innerJoinAndSelect('provider.ownerUser', 'ownerUser')
+      .where(CATEGORY_EXISTS_CLAUSE, { categoryId })
+      .andWhere('provider.verificationStatus = ANY(:eligibleStatuses)', {
+        eligibleStatuses: EligibleStatuses(this.config.required),
+      })
+      .getMany();
+  }
+
   FindBySlug(slug: string): Promise<Provider | null> {
     return this.repository.findOne({ where: { slug } });
   }

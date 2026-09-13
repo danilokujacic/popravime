@@ -35,4 +35,5 @@ export interface IProvidersService {
   ): Promise<Provider>;
   CountByVerificationStatus(): Promise<Record<VerificationStatus, number>>;
   FindCategoryIdsForOwner(ownerUserId: string): Promise<string[]>;
+  ListEligibleForCategory(categoryId: string): Promise<Provider[]>;
 }
