@@ -94,6 +94,7 @@ function BuildService(request: RepairRequest) {
     notificationsService,
     auditLogsService,
     providersService,
+    logger,
   };
 }
 
@@ -259,11 +260,15 @@ describe('RepairRequestsService.Approve / Reject', () => {
 
   it('rejects reviewing a request that already left pending_review', async () => {
     const request = BuildRequest({ status: RequestStatus.Open });
-    const { service } = BuildService(request);
+    const { service, logger } = BuildService(request);
 
     await expect(
       service.Approve('request-1', 'admin-1'),
     ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'request-1' }),
+      expect.any(String),
+    );
   });
 
   it('notifies the customer of the moderation decision', async () => {
@@ -375,11 +380,19 @@ describe('RepairRequestsService.AcceptOffer', () => {
       customerId: 'someone-else',
       status: RequestStatus.OffersReceived,
     });
-    const { service, repairRequestsRepository } = BuildService(request);
+    const { service, repairRequestsRepository, logger } =
+      BuildService(request);
 
     await expect(
       service.AcceptOffer('request-1', 'offer-1', 'customer-1'),
     ).rejects.toBeInstanceOf(DomainForbiddenException);
     expect(repairRequestsRepository.TryAccept).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 'request-1',
+        customerId: 'customer-1',
+      }),
+      expect.any(String),
+    );
   });
 });

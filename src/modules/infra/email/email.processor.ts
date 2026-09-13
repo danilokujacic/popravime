@@ -1,5 +1,5 @@
 import { Inject } from '@nestjs/common';
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import type { EmailService } from './email.service.interface';
@@ -71,6 +71,27 @@ function BuildContent(job: EmailJob): EmailContent {
   }
 }
 
+interface SmtpErrorDetails {
+  message: string;
+  code?: string;
+  responseCode?: number;
+}
+
+function ExtractSmtpErrorDetails(error: unknown): SmtpErrorDetails {
+  if (!(error instanceof Error)) {
+    return { message: 'unknown error' };
+  }
+
+  const code =
+    'code' in error && typeof error.code === 'string' ? error.code : undefined;
+  const responseCode =
+    'responseCode' in error && typeof error.responseCode === 'number'
+      ? error.responseCode
+      : undefined;
+
+  return { message: error.message, code, responseCode };
+}
+
 @Processor(EMAIL_QUEUE_NAME)
 export class EmailProcessor extends WorkerHost {
   constructor(
@@ -83,12 +104,62 @@ export class EmailProcessor extends WorkerHost {
 
   async process(job: Job<EmailJob>): Promise<void> {
     const content = BuildContent(job.data);
+    const { kind: emailKind, correlationId } = job.data;
+    const attempt = job.attemptsMade + 1;
 
     this.logger.info(
-      { jobKind: job.data.kind, to: content.to },
-      'Sending email',
+      { emailKind, to: content.to, attempt, correlationId },
+      'Processing queued email',
     );
 
-    await this.emailService.Send(content);
+    try {
+      const result = await this.emailService.Send(content);
+      this.logger.info(
+        {
+          emailKind,
+          to: content.to,
+          accepted: result.accepted,
+          rejected: result.rejected,
+          messageId: result.messageId,
+          correlationId,
+        },
+        'Email sent',
+      );
+    } catch (error) {
+      this.logger.error(
+        {
+          emailKind,
+          to: content.to,
+          attempt,
+          correlationId,
+          ...ExtractSmtpErrorDetails(error),
+        },
+        'Email send failed',
+      );
+      throw error;
+    }
+  }
+
+  @OnWorkerEvent('failed')
+  OnFailed(job: Job<EmailJob> | undefined, error: Error): void {
+    if (!job) {
+      return;
+    }
+
+    const maxAttempts = job.opts.attempts ?? 1;
+    if (job.attemptsMade < maxAttempts) {
+      return;
+    }
+
+    this.logger.error(
+      {
+        emailKind: job.data.kind,
+        to: job.data.payload.to,
+        correlationId: job.data.correlationId,
+        attemptsMade: job.attemptsMade,
+        ...ExtractSmtpErrorDetails(error),
+      },
+      'Email job exhausted all retry attempts',
+    );
   }
 }

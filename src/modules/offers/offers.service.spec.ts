@@ -130,6 +130,7 @@ describe('OffersService.Accept', () => {
       repairRequestsService,
       notificationsService,
       offer,
+      logger,
     };
   }
 
@@ -203,7 +204,7 @@ describe('OffersService.Accept', () => {
   });
 
   it('rejects accepting an offer that is not pending', async () => {
-    const { service, repairRequestsService } = BuildService({
+    const { service, repairRequestsService, logger } = BuildService({
       offer: BuildOffer({ status: OfferStatus.Withdrawn }),
     });
 
@@ -211,6 +212,10 @@ describe('OffersService.Accept', () => {
       service.Accept('offer-1', 'customer-1'),
     ).rejects.toBeInstanceOf(DomainConflictException);
     expect(repairRequestsService.AcceptOffer).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ offerId: 'offer-1' }),
+      expect.any(String),
+    );
   });
 
   it('never mutates the offer when the request does not belong to the caller', async () => {
@@ -303,6 +308,7 @@ describe('OffersService.Create', () => {
       repairRequestsService,
       notificationsService,
       offersRepository,
+      logger,
     };
   }
 
@@ -330,7 +336,7 @@ describe('OffersService.Create', () => {
   });
 
   it('rejects submitting an offer once the request is no longer open for offers', async () => {
-    const { service } = BuildService(
+    const { service, logger } = BuildService(
       BuildRequest({ status: RequestStatus.Accepted }),
     );
 
@@ -344,6 +350,39 @@ describe('OffersService.Create', () => {
         partsType: PartsType.Original,
       }),
     ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'request-1' }),
+      expect.any(String),
+    );
+  });
+
+  it('rejects submitting an offer for a provider the caller does not own', async () => {
+    const { service, offersRepository, logger } = BuildService(
+      BuildRequest(),
+      BuildProvider({
+        ownerUserId: 'someone-else',
+        verificationStatus: VerificationStatus.Verified,
+      }),
+    );
+
+    await expect(
+      service.Create('provider-owner-1', {
+        requestId: 'request-1',
+        providerId: 'provider-1',
+        priceMin: '3000',
+        priceMax: '6000',
+        estimatedDuration: '2 days',
+        partsType: PartsType.Original,
+      }),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+    expect(offersRepository.Create).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOwnerId: 'someone-else',
+        requesterId: 'provider-owner-1',
+      }),
+      expect.any(String),
+    );
   });
 
   it('rejects submitting an offer for a pending provider when verification is required', async () => {
@@ -405,6 +444,145 @@ describe('OffersService.Create', () => {
       ).rejects.toBeInstanceOf(DomainForbiddenException);
       expect(offersRepository.Create).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('OffersService.Reject', () => {
+  function BuildService(overrides?: {
+    offer?: ReturnType<typeof BuildOffer>;
+    request?: RepairRequest;
+  }) {
+    const offer = overrides?.offer ?? BuildOffer();
+    const request = overrides?.request ?? BuildRequest();
+
+    const offersRepository = {
+      FindById: jest.fn().mockResolvedValue(offer),
+      Save: jest.fn().mockImplementation((value) => Promise.resolve(value)),
+    } as unknown as OffersRepository;
+
+    const repairRequestsService = {
+      FindById: jest.fn().mockResolvedValue(request),
+    } as unknown as RepairRequestsService;
+
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof OffersService>[7];
+
+    const service = new OffersService(
+      offersRepository,
+      {} as ProvidersService,
+      repairRequestsService,
+      {} as UsersService,
+      {} as NotificationsService,
+      { required: true },
+      {} as ConstructorParameters<typeof OffersService>[6],
+      logger,
+    );
+
+    return { service, offersRepository, logger };
+  }
+
+  it('rejects the offer for its owning customer', async () => {
+    const { service, offersRepository } = BuildService();
+
+    const result = await service.Reject('offer-1', 'customer-1');
+
+    expect(result.status).toBe(OfferStatus.Rejected);
+    expect(offersRepository.Save).toHaveBeenCalled();
+  });
+
+  it('rejects a caller who does not own the repair request', async () => {
+    const { service, offersRepository, logger } = BuildService({
+      request: BuildRequest({ customerId: 'someone-else' }),
+    });
+
+    await expect(
+      service.Reject('offer-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+    expect(offersRepository.Save).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ offerId: 'offer-1', customerId: 'customer-1' }),
+      expect.any(String),
+    );
+  });
+
+  it('rejects rejecting an offer that is not pending', async () => {
+    const { service, logger } = BuildService({
+      offer: BuildOffer({ status: OfferStatus.Withdrawn }),
+    });
+
+    await expect(
+      service.Reject('offer-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ offerId: 'offer-1' }),
+      expect.any(String),
+    );
+  });
+});
+
+describe('OffersService.Withdraw', () => {
+  function BuildService(overrides?: {
+    offer?: ReturnType<typeof BuildOffer>;
+    provider?: Provider;
+  }) {
+    const offer = overrides?.offer ?? BuildOffer();
+    const provider = overrides?.provider ?? BuildProvider();
+
+    const offersRepository = {
+      FindById: jest.fn().mockResolvedValue(offer),
+      Save: jest.fn().mockImplementation((value) => Promise.resolve(value)),
+    } as unknown as OffersRepository;
+
+    const providersService = {
+      FindById: jest.fn().mockResolvedValue(provider),
+    } as unknown as ProvidersService;
+
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof OffersService>[7];
+
+    const service = new OffersService(
+      offersRepository,
+      providersService,
+      {} as RepairRequestsService,
+      {} as UsersService,
+      {} as NotificationsService,
+      { required: true },
+      {} as ConstructorParameters<typeof OffersService>[6],
+      logger,
+    );
+
+    return { service, offersRepository, logger };
+  }
+
+  it('withdraws the offer for its owning provider', async () => {
+    const { service, offersRepository } = BuildService();
+
+    const result = await service.Withdraw('offer-1', 'provider-owner-1');
+
+    expect(result.status).toBe(OfferStatus.Withdrawn);
+    expect(offersRepository.Save).toHaveBeenCalled();
+  });
+
+  it('rejects a caller who does not own the provider', async () => {
+    const { service, offersRepository, logger } = BuildService({
+      provider: BuildProvider({ ownerUserId: 'someone-else' }),
+    });
+
+    await expect(
+      service.Withdraw('offer-1', 'provider-owner-1'),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+    expect(offersRepository.Save).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOwnerId: 'someone-else',
+        requesterId: 'provider-owner-1',
+      }),
+      expect.any(String),
+    );
   });
 });
 

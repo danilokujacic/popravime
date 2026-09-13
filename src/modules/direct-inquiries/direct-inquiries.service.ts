@@ -68,7 +68,11 @@ export class DirectInquiriesService implements IDirectInquiriesService {
     });
 
     this.logger.info(
-      { inquiryId: inquiry.id, providerId: input.providerId },
+      {
+        inquiryId: inquiry.id,
+        providerId: input.providerId,
+        customerId: input.customerId ?? null,
+      },
       'Direct inquiry created',
     );
 
@@ -144,6 +148,10 @@ export class DirectInquiriesService implements IDirectInquiriesService {
   ): Promise<void> {
     const provider = await this.providersService.FindById(providerId);
     if (provider.ownerUserId !== providerOwnerId) {
+      this.logger.warn(
+        { providerId, providerOwnerId },
+        'Direct inquiry operation rejected: not the owning provider',
+      );
       throw new DomainForbiddenException(
         'PROVIDER_NOT_OWNED',
         'You do not own this provider profile',
@@ -155,6 +163,10 @@ export class DirectInquiriesService implements IDirectInquiriesService {
     const hasContact =
       Boolean(input.name) && Boolean(input.contactEmail ?? input.contactPhone);
     if (!hasContact) {
+      this.logger.warn(
+        { providerId: input.providerId },
+        'Direct inquiry submission rejected: missing guest contact info',
+      );
       throw new DomainValidationException(
         'CONTACT_INFO_REQUIRED',
         'Provide your name and an email or phone number',

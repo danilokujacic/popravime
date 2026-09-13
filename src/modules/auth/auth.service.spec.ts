@@ -1,3 +1,4 @@
+import type { ClsService } from 'nestjs-cls';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { EmailConfirmationsService } from '../email-confirmations/email-confirmations.service';
@@ -58,14 +59,18 @@ function BuildService(overrides?: {
     refreshExpiresInSeconds: 604800,
   };
 
+  const cls = {
+    get: jest.fn().mockReturnValue('correlation-1'),
+  } as unknown as ClsService;
+
   const app = {
     frontendUrl: 'http://localhost:3000',
-  } as unknown as ConstructorParameters<typeof AuthService>[7];
+  } as unknown as ConstructorParameters<typeof AuthService>[8];
 
   const logger = {
     warn: jest.fn(),
     info: jest.fn(),
-  } as unknown as ConstructorParameters<typeof AuthService>[8];
+  } as unknown as ConstructorParameters<typeof AuthService>[9];
 
   const service = new AuthService(
     usersService,
@@ -74,6 +79,7 @@ function BuildService(overrides?: {
     jwtService,
     emailQueueService,
     refreshTokenDenylistService,
+    cls,
     config,
     app,
     logger,
@@ -86,6 +92,7 @@ function BuildService(overrides?: {
     passwordHasher,
     emailQueueService,
     refreshTokenDenylistService,
+    logger,
   };
 }
 
@@ -267,17 +274,21 @@ describe('AuthService', () => {
 
   describe('ResendConfirmation', () => {
     it('rejects an unknown email', async () => {
-      const { service } = BuildService({
+      const { service, logger } = BuildService({
         usersService: { FindByEmail: jest.fn().mockResolvedValue(null) },
       });
 
       await expect(
         service.ResendConfirmation('unknown@popravime.me'),
       ).rejects.toBeInstanceOf(DomainNotFoundException);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'unknown@popravime.me' }),
+        expect.any(String),
+      );
     });
 
     it('rejects an already-verified email', async () => {
-      const { service } = BuildService({
+      const { service, logger } = BuildService({
         usersService: {
           FindByEmail: jest.fn().mockResolvedValue({
             id: 'user-1',
@@ -291,6 +302,10 @@ describe('AuthService', () => {
       await expect(
         service.ResendConfirmation('ana@popravime.me'),
       ).rejects.toBeInstanceOf(DomainConflictException);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-1' }),
+        expect.any(String),
+      );
     });
 
     it('sends a fresh confirmation link for an unverified account', async () => {

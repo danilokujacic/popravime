@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
+import { ClsModule } from 'nestjs-cls';
 import type { ConfigType } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
@@ -12,6 +13,7 @@ import { DatabaseModule } from './database/database.module';
 import { DomainExceptionFilter } from './common/filters/domain-exception.filter';
 import { CaseTransformInterceptor } from './common/interceptors/case-transform.interceptor';
 import { BuildPinoOptions } from './shared/logger/pino.options';
+import { CorrelationClsSetup } from './common/middleware/correlation-cls.setup';
 import { HealthModule } from './modules/health/health.module';
 import { CacheInfraModule } from './modules/infra/cache/cache.module';
 import { RateLimitModule } from './modules/infra/rate-limit/rate-limit.module';
@@ -49,6 +51,13 @@ import { AdminModule } from './modules/admin/admin.module';
       inject: [appConfig.KEY],
       useFactory: (config: ConfigType<typeof appConfig>) =>
         BuildPinoOptions(config.nodeEnv),
+    }),
+    ClsModule.forRoot({
+      global: true,
+      middleware: {
+        mount: true,
+        setup: CorrelationClsSetup,
+      },
     }),
     DatabaseModule,
     CacheInfraModule,

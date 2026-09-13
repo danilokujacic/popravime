@@ -4,6 +4,12 @@ export interface SendEmailInput {
   html: string;
 }
 
+export interface SendEmailResult {
+  accepted: string[];
+  rejected: string[];
+  messageId: string | null;
+}
+
 export interface WelcomeJobPayload {
   to: string;
   fullName: string;
@@ -92,7 +98,10 @@ export interface NewRepairRequestJobPayload {
   previewUrl: string;
 }
 
-export type EmailJob =
+// What an email job renders — the kind/payload pair. Callers that never touch the queue
+// directly (they go through NotificationsService.Notify) only ever construct this part; it's
+// NotificationsService's job to attach the metadata below before enqueuing, not theirs.
+export type EmailJobContent =
   | { kind: 'welcome'; payload: WelcomeJobPayload }
   | { kind: 'email-confirmation'; payload: EmailConfirmationJobPayload }
   | { kind: 'offer-received'; payload: OfferReceivedJobPayload }
@@ -108,3 +117,15 @@ export type EmailJob =
   | { kind: 'new-message'; payload: NewMessageJobPayload }
   | { kind: 'new-inquiry'; payload: NewInquiryJobPayload }
   | { kind: 'new-repair-request'; payload: NewRepairRequestJobPayload };
+
+// Queue/job metadata, not email content — kept separate from EmailJobContent so the many
+// call sites that only ever describe *what* to send (they go through
+// NotificationsService.Notify) never need to know about correlation ids. Required (not
+// optional): every path that reaches the queue must supply the correlation id of the request
+// (or job) that triggered this email, so its send lifecycle stays traceable in Loki. See
+// openspec/changes/add-grafana-loki-observability/specs/observability/request-correlation.
+export interface EmailJobMetadata {
+  correlationId: string;
+}
+
+export type EmailJob = EmailJobMetadata & EmailJobContent;

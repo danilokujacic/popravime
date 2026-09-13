@@ -11,6 +11,8 @@ import { AppModule } from './app.module';
 import { appConfig } from './config/app.config';
 import { ValidationFieldsException } from './common/exceptions/validation-fields.exception';
 import { BuildValidationFields } from './common/validation/build-validation-fields';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { CORRELATION_ID_HEADER } from './common/constants/correlation.constants';
 
 async function Bootstrap(): Promise<void> {
   initializeTransactionalContext();
@@ -24,11 +26,16 @@ async function Bootstrap(): Promise<void> {
   const config = app.get<ConfigType<typeof appConfig>>(appConfig.KEY);
 
   app.set('trust proxy', 1);
+  // Must run before pino-http's and ClsMiddleware's module-registered middleware (which Nest
+  // only wires up once `init()` runs, i.e. inside `app.listen()` below) so both reuse this same
+  // `req.id` instead of each generating their own — see CorrelationIdMiddleware.
+  app.use(CorrelationIdMiddleware);
   app.use(helmet());
   app.use(compression());
   app.enableCors({
     origin: config.corsOrigins,
     credentials: true,
+    exposedHeaders: [CORRELATION_ID_HEADER],
   });
 
   app.useGlobalPipes(

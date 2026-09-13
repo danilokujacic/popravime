@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import type { ConfigType } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
+import { ClsService } from 'nestjs-cls';
 import { UsersService } from '../users/users.service';
 import { EmailConfirmationsService } from '../email-confirmations/email-confirmations.service';
 import { PasswordHasher } from '../../shared/password/password-hasher';
@@ -21,6 +22,7 @@ import { DomainForbiddenException } from '../../common/exceptions/forbidden.exce
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { EmailQueueService } from '../infra/email/email-queue.service';
 import { RefreshTokenDenylistService } from './refresh-token-denylist.service';
+import { CORRELATION_ID_CLS_KEY } from '../../common/constants/correlation.constants';
 
 @Injectable()
 export class AuthService implements IAuthService {
@@ -31,6 +33,7 @@ export class AuthService implements IAuthService {
     private readonly jwtService: JwtService,
     private readonly emailQueueService: EmailQueueService,
     private readonly refreshTokenDenylistService: RefreshTokenDenylistService,
+    private readonly cls: ClsService,
     @Inject(jwtConfig.KEY)
     private readonly config: ConfigType<typeof jwtConfig>,
     @Inject(appConfig.KEY)
@@ -125,12 +128,20 @@ export class AuthService implements IAuthService {
   async ResendConfirmation(email: string): Promise<void> {
     const user = await this.usersService.FindByEmail(email);
     if (!user) {
+      this.logger.warn(
+        { email },
+        'Confirmation resend requested for unknown email',
+      );
       throw new DomainNotFoundException(
         'USER_NOT_FOUND',
         'No account with that email',
       );
     }
     if (user.emailVerified) {
+      this.logger.warn(
+        { userId: user.id },
+        'Confirmation resend requested for an already-verified email',
+      );
       throw new DomainConflictException(
         'EMAIL_ALREADY_VERIFIED',
         'This email is already confirmed',
@@ -151,6 +162,7 @@ export class AuthService implements IAuthService {
     await this.emailQueueService.Enqueue({
       kind: 'email-confirmation',
       payload: { to: email, fullName, confirmUrl },
+      correlationId: this.cls.get<string>(CORRELATION_ID_CLS_KEY) ?? randomUUID(),
     });
   }
 

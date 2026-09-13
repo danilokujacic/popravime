@@ -1,7 +1,8 @@
 import { createTransport, Transporter } from 'nodemailer';
 import { EmailService } from './email.service.interface';
-import { SendEmailInput } from './email.types';
+import { SendEmailInput, SendEmailResult } from './email.types';
 import { EmailConfig } from '../../../config/email.config';
+import { MapSentMessageInfo } from './mappers/sent-message-info.mapper';
 
 export class SmtpEmailService implements EmailService {
   private readonly transporter: Transporter;
@@ -17,12 +18,14 @@ export class SmtpEmailService implements EmailService {
     });
   }
 
-  async Send(input: SendEmailInput): Promise<void> {
-    await this.transporter.sendMail({
+  async Send(input: SendEmailInput): Promise<SendEmailResult> {
+    const info = await this.transporter.sendMail({
       from: this.config.from,
       to: input.to,
       subject: input.subject,
       html: input.html,
     });
+
+    return MapSentMessageInfo(info);
   }
 }

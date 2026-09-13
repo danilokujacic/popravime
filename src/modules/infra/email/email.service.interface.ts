@@ -1,5 +1,5 @@
-import { SendEmailInput } from './email.types';
+import { SendEmailInput, SendEmailResult } from './email.types';
 
 export interface EmailService {
-  Send(input: SendEmailInput): Promise<void>;
+  Send(input: SendEmailInput): Promise<SendEmailResult>;
 }

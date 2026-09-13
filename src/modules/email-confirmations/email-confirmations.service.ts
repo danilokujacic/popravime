@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { randomBytes } from 'crypto';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { EmailConfirmationsRepository } from './email-confirmations.repository';
 import { emailConfirmationConfig } from '../../config/email-confirmation.config';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
@@ -12,6 +13,8 @@ export class EmailConfirmationsService {
     private readonly repository: EmailConfirmationsRepository,
     @Inject(emailConfirmationConfig.KEY)
     private readonly config: ConfigType<typeof emailConfirmationConfig>,
+    @InjectPinoLogger(EmailConfirmationsService.name)
+    private readonly logger: PinoLogger,
   ) {}
 
   // Any earlier outstanding link for this email is invalidated first — a fresh Create (register
@@ -32,6 +35,10 @@ export class EmailConfirmationsService {
   async Confirm(slug: string): Promise<string> {
     const record = await this.repository.FindBySlug(slug);
     if (!record) {
+      this.logger.warn(
+        {},
+        'Email confirmation attempted with an invalid or already-used link',
+      );
       throw new DomainNotFoundException(
         'EMAIL_CONFIRMATION_NOT_FOUND',
         'This confirmation link is invalid or has already been used',
@@ -41,6 +48,10 @@ export class EmailConfirmationsService {
     await this.repository.DeleteById(record.id);
 
     if (record.expiresAt.getTime() < Date.now()) {
+      this.logger.warn(
+        { email: record.email },
+        'Email confirmation attempted with an expired link',
+      );
       throw new DomainConflictException(
         'EMAIL_CONFIRMATION_EXPIRED',
         'This confirmation link has expired',

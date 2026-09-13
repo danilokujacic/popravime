@@ -54,7 +54,7 @@ export class OffersService implements IOffersService {
     this.EnsureProviderEligible(provider.verificationStatus);
 
     const request = await this.repairRequestsService.FindById(input.requestId);
-    this.EnsureAcceptingOffers(request.status);
+    this.EnsureAcceptingOffers(input.requestId, request.status);
 
     const offer = await this.offersRepository.Create({
       requestId: input.requestId,
@@ -106,7 +106,7 @@ export class OffersService implements IOffersService {
   @Transactional()
   async Accept(offerId: string, customerId: string): Promise<Offer> {
     const offer = await this.FindById(offerId);
-    this.EnsureTransition(offer.status, OfferStatus.Accepted);
+    this.EnsureTransition(offerId, offer.status, OfferStatus.Accepted);
 
     await this.repairRequestsService.AcceptOffer(
       offer.requestId,
@@ -195,10 +195,14 @@ export class OffersService implements IOffersService {
 
   async Reject(offerId: string, customerId: string): Promise<Offer> {
     const offer = await this.FindById(offerId);
-    this.EnsureTransition(offer.status, OfferStatus.Rejected);
+    this.EnsureTransition(offerId, offer.status, OfferStatus.Rejected);
 
     const request = await this.repairRequestsService.FindById(offer.requestId);
     if (request.customerId !== customerId) {
+      this.logger.warn(
+        { offerId, customerId },
+        'Offer rejection rejected: not the owning customer',
+      );
       throw new DomainForbiddenException(
         'OFFER_NOT_OWNED',
         'You do not own the repair request this offer belongs to',
@@ -215,7 +219,7 @@ export class OffersService implements IOffersService {
 
   async Withdraw(offerId: string, providerOwnerId: string): Promise<Offer> {
     const offer = await this.FindById(offerId);
-    this.EnsureTransition(offer.status, OfferStatus.Withdrawn);
+    this.EnsureTransition(offerId, offer.status, OfferStatus.Withdrawn);
 
     const provider = await this.providersService.FindById(offer.providerId);
     this.EnsureProviderOwnership(provider.ownerUserId, providerOwnerId);
@@ -339,10 +343,14 @@ export class OffersService implements IOffersService {
     }
   }
 
-  private EnsureAcceptingOffers(status: RequestStatus): void {
+  private EnsureAcceptingOffers(requestId: string, status: RequestStatus): void {
     const acceptsOffers =
       status === RequestStatus.Open || status === RequestStatus.OffersReceived;
     if (!acceptsOffers) {
+      this.logger.warn(
+        { requestId, status },
+        'Offer submission rejected: request no longer accepting offers',
+      );
       throw new DomainConflictException(
         'REQUEST_NOT_ACCEPTING_OFFERS',
         'This repair request is no longer accepting offers',
@@ -355,6 +363,10 @@ export class OffersService implements IOffersService {
     requesterId: string,
   ): void {
     if (providerOwnerId !== requesterId) {
+      this.logger.warn(
+        { providerOwnerId, requesterId },
+        'Offer operation rejected: not the owning provider',
+      );
       throw new DomainForbiddenException(
         'PROVIDER_NOT_OWNED',
         'You do not own this provider profile',
@@ -383,8 +395,16 @@ export class OffersService implements IOffersService {
     }
   }
 
-  private EnsureTransition(from: OfferStatus, to: OfferStatus): void {
+  private EnsureTransition(
+    offerId: string,
+    from: OfferStatus,
+    to: OfferStatus,
+  ): void {
     if (!OfferStatusTransitions.CanTransition(from, to)) {
+      this.logger.warn(
+        { offerId, from, to },
+        'Offer operation rejected: invalid status transition',
+      );
       throw new DomainConflictException(
         'INVALID_OFFER_TRANSITION',
         `Cannot transition offer from ${from} to ${to}`,

@@ -34,9 +34,13 @@ function BuildService(overrides?: {
 
   const config = { ttlSeconds: 3600 };
 
-  const service = new EmailConfirmationsService(repository, config);
+  const logger = {
+    warn: jest.fn(),
+  } as unknown as ConstructorParameters<typeof EmailConfirmationsService>[2];
 
-  return { service, repository };
+  const service = new EmailConfirmationsService(repository, config, logger);
+
+  return { service, repository, logger };
 }
 
 describe('EmailConfirmationsService.Create', () => {
@@ -61,13 +65,14 @@ describe('EmailConfirmationsService.Create', () => {
 
 describe('EmailConfirmationsService.Confirm', () => {
   it('rejects an unknown slug', async () => {
-    const { service } = BuildService({
+    const { service, logger } = BuildService({
       repository: { FindBySlug: jest.fn().mockResolvedValue(null) },
     });
 
     await expect(service.Confirm('missing')).rejects.toBeInstanceOf(
       DomainNotFoundException,
     );
+    expect(logger.warn).toHaveBeenCalled();
   });
 
   it('deletes the record and returns the email for a still-valid slug', async () => {
@@ -84,7 +89,7 @@ describe('EmailConfirmationsService.Confirm', () => {
 
   it('deletes the record and rejects an expired slug', async () => {
     const record = BuildRecord({ expiresAt: new Date(Date.now() - 1000) });
-    const { service, repository } = BuildService({
+    const { service, repository, logger } = BuildService({
       repository: { FindBySlug: jest.fn().mockResolvedValue(record) },
     });
 
@@ -92,6 +97,10 @@ describe('EmailConfirmationsService.Confirm', () => {
       DomainConflictException,
     );
     expect(repository.DeleteById).toHaveBeenCalledWith('confirmation-1');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'ana@popravime.me' }),
+      expect.any(String),
+    );
   });
 
   it('a second attempt on the same (now-deleted) slug is treated as unknown', async () => {

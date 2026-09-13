@@ -1,4 +1,4 @@
-import { EmailJob } from '../infra/email/email.types';
+import { EmailJobContent } from '../infra/email/email.types';
 
 export enum NotificationType {
   NewOffer = 'new_offer',
@@ -20,5 +20,5 @@ export interface NotifyInput {
   body: string;
   relatedEntityType?: string;
   relatedEntityId?: string;
-  email: EmailJob;
+  email: EmailJobContent;
 }

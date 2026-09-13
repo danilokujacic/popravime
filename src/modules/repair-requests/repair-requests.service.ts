@@ -191,7 +191,7 @@ export class RepairRequestsService implements IRepairRequestsService {
     reviewNotes?: string,
   ): Promise<RepairRequest> {
     const request = await this.FindById(id);
-    this.EnsureModerationTransition(request.status, status);
+    this.EnsureModerationTransition(id, request.status, status);
 
     request.status = status;
     const saved = await this.repairRequestsRepository.Save(request);
@@ -296,10 +296,15 @@ export class RepairRequestsService implements IRepairRequestsService {
   }
 
   private EnsureModerationTransition(
+    id: string,
     from: RequestStatus,
     to: RequestStatus,
   ): void {
     if (!ModerationStatusTransitions.CanTransition(from, to)) {
+      this.logger.warn(
+        { requestId: id, from, to },
+        'Repair request moderation decision rejected: invalid status transition',
+      );
       throw new DomainConflictException(
         'INVALID_STATUS_TRANSITION',
         `Cannot transition repair request from ${from} to ${to}`,
@@ -315,7 +320,7 @@ export class RepairRequestsService implements IRepairRequestsService {
   ): Promise<RepairRequest> {
     const request = await this.FindById(id);
     this.EnsureOwnership(request, customerId);
-    this.EnsureTransition(request.status, status);
+    this.EnsureTransition(id, request.status, status);
 
     request.status = status;
     const saved = await this.repairRequestsRepository.Save(request);
@@ -377,7 +382,7 @@ export class RepairRequestsService implements IRepairRequestsService {
   ): Promise<RepairRequest> {
     const request = await this.FindById(id);
     this.EnsureOwnership(request, customerId);
-    this.EnsureTransition(request.status, RequestStatus.Accepted);
+    this.EnsureTransition(id, request.status, RequestStatus.Accepted);
 
     const accepted = await this.repairRequestsRepository.TryAccept(
       id,
@@ -408,6 +413,10 @@ export class RepairRequestsService implements IRepairRequestsService {
 
   private EnsureOwnership(request: RepairRequest, customerId: string): void {
     if (request.customerId !== customerId) {
+      this.logger.warn(
+        { requestId: request.id, customerId },
+        'Repair request operation rejected: not the owning customer',
+      );
       throw new DomainForbiddenException(
         'REPAIR_REQUEST_NOT_OWNED',
         'You do not own this repair request',
@@ -415,8 +424,16 @@ export class RepairRequestsService implements IRepairRequestsService {
     }
   }
 
-  private EnsureTransition(from: RequestStatus, to: RequestStatus): void {
+  private EnsureTransition(
+    id: string,
+    from: RequestStatus,
+    to: RequestStatus,
+  ): void {
     if (!RequestStatusTransitions.CanTransition(from, to)) {
+      this.logger.warn(
+        { requestId: id, from, to },
+        'Repair request status change rejected: invalid status transition',
+      );
       throw new DomainConflictException(
         'INVALID_STATUS_TRANSITION',
         `Cannot transition repair request from ${from} to ${to}`,

@@ -1,8 +1,11 @@
+import type { ClsService } from 'nestjs-cls';
 import { NotificationsService } from './notifications.service';
 import { NotificationsRepository } from './notifications.repository';
 import { EmailQueueService } from '../infra/email/email-queue.service';
 import { Notification } from './entities/notification.entity';
 import { NotificationType, NotifyInput } from './notifications.types';
+
+const CORRELATION_ID = 'correlation-1';
 
 function BuildInput(overrides?: Partial<NotifyInput>): NotifyInput {
   return {
@@ -44,18 +47,23 @@ describe('NotificationsService.Notify (outside a transactional context)', () => 
       Enqueue: jest.fn().mockResolvedValue(undefined),
     } as unknown as EmailQueueService;
 
+    const cls = {
+      get: jest.fn().mockReturnValue(CORRELATION_ID),
+    } as unknown as ClsService;
+
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof NotificationsService>[2];
+    } as unknown as ConstructorParameters<typeof NotificationsService>[3];
 
     const service = new NotificationsService(
       notificationsRepository,
       emailQueueService,
+      cls,
       logger,
     );
 
-    return { service, notificationsRepository, emailQueueService, logger };
+    return { service, notificationsRepository, emailQueueService, cls, logger };
   }
 
   it('persists the notification and enqueues the email immediately as a fallback', async () => {
@@ -70,9 +78,15 @@ describe('NotificationsService.Notify (outside a transactional context)', () => 
     expect(notificationsRepository.Create).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'user-1', type: input.type }),
     );
-    expect(emailQueueService.Enqueue).toHaveBeenCalledWith(input.email);
+    expect(emailQueueService.Enqueue).toHaveBeenCalledWith({
+      ...input.email,
+      correlationId: CORRELATION_ID,
+    });
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ emailKind: 'welcome' }),
+      expect.objectContaining({
+        emailKind: 'welcome',
+        correlationId: CORRELATION_ID,
+      }),
       expect.any(String),
     );
   });

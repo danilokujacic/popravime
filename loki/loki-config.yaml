@@ -1,0 +1,38 @@
+# Single-node, filesystem-backed Loki config for a single-VM deployment (matches the rest of
+# this repo's docker-compose topology — no separate object store, no clustering).
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: boltdb-shipper
+      object_store: filesystem
+      schema: v11
+      index:
+        prefix: index_
+        period: 24h
+
+# Bounded retention so log storage on the VM doesn't grow unbounded — see design.md decision 5.
+# Adjust retention_period directly here if the window needs to change; it isn't wired through an
+# app-level env var since it's infra config, not an application constant.
+limits_config:
+  retention_period: 720h
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
