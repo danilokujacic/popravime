@@ -13,7 +13,7 @@ import {
   VerificationStatus,
 } from './providers.types';
 import { IProvidersService } from './providers.service.interface';
-import type { IGeocodingService } from './geocoding/geocoding.service.interface';
+import type { IGeocodingService } from '../infra/geocoding/geocoding.service.interface';
 import { CitiesService } from '../cities/cities.service';
 import { SlugGenerator } from '../../shared/slug/slug.generator';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';

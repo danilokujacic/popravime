@@ -67,6 +67,8 @@ export const EnvValidationSchema = Joi.object({
   THROTTLE_REFRESH_TTL_MS: Joi.number().default(60000),
   THROTTLE_CONTACT_MESSAGE_LIMIT: Joi.number().default(3),
   THROTTLE_CONTACT_MESSAGE_TTL_MS: Joi.number().default(60000),
+  THROTTLE_GEOCODING_LIMIT: Joi.number().default(20),
+  THROTTLE_GEOCODING_TTL_MS: Joi.number().default(60000),
 
   GEOCODING_USER_AGENT: Joi.string().required(),
 

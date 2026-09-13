@@ -2,7 +2,7 @@ import { ProvidersService } from './providers.service';
 import { ProviderRepository } from './repositories/provider.repository';
 import { ProviderCategoryRepository } from './repositories/provider-category.repository';
 import { CitiesService } from '../cities/cities.service';
-import type { IGeocodingService } from './geocoding/geocoding.service.interface';
+import type { IGeocodingService } from '../infra/geocoding/geocoding.service.interface';
 import { Provider } from './entities/provider.entity';
 import { City } from '../cities/entities/city.entity';
 import { DomainConflictException } from '../../common/exceptions/conflict.exception';

@@ -232,10 +232,22 @@ than re-fetching on every screen that needs a city/category picker.
 |---|---|---|---|
 | GET | `/cities` | public | query: `region?`, `is_active?` (bool). Not paginated. |
 | GET | `/cities/:id` | public | |
+| GET | `/cities/lookup-by-coordinates` | public, throttled | query: `latitude`, `longitude` (both required, decimal degree strings). See below. |
 | GET | `/categories` | public | query: `parent_category_id?` (for subcategory drill-down). Not paginated. |
 | GET | `/categories/:id` | public | |
 
 City shape: `{id, name, slug, region, is_active, provider_count}`.
+
+### 4.1 Resolve a city from a map point
+
+`GET /cities/lookup-by-coordinates?latitude=42.4304&longitude=19.2594` reverse-geocodes the point
+and matches it against our known municipality list. Response is always `200`, never `404`:
+`{city: City | null}` — `null` means the point didn't resolve to one of our cities (open
+countryside, just outside a municipality boundary, geocoding turned up nothing), which is a
+normal outcome, not an error. Use it to auto-fill a city picker from a map pin instead of asking
+the user to pick their city manually — fall back to manual selection when `city` is `null`.
+Throttled (~20/min by default) since every call hits an external geocoding service with no
+caching — don't call it on every mousemove, only once a pin is dropped/confirmed.
 
 Category shape: `{id, slug, icon_url, parent_category_id}` — note there is **no `name`**.
 Categories are not translated server-side; `slug` (e.g. `mobile-phones`) is a stable
