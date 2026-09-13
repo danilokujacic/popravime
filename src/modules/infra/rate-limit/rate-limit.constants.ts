@@ -20,3 +20,14 @@ export const CONTACT_MESSAGE_THROTTLE = {
     ttl: Number(process.env.THROTTLE_CONTACT_MESSAGE_TTL_MS ?? 60000),
   },
 };
+
+// GET /cities/lookup-by-coordinates calls out to Nominatim on every request (no caching — the
+// input space is unbounded lat/lng pairs). Nominatim's usage policy is ~1 req/sec for our whole
+// app's shared User-Agent, so this needs its own tight budget to stop one client from getting
+// that User-Agent rate-limited/blocked for everyone.
+export const GEOCODING_THROTTLE = {
+  default: {
+    limit: Number(process.env.THROTTLE_GEOCODING_LIMIT ?? 20),
+    ttl: Number(process.env.THROTTLE_GEOCODING_TTL_MS ?? 60000),
+  },
+};

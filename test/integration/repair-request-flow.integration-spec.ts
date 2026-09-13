@@ -14,7 +14,7 @@ import { SeedCities } from '../../src/database/seeds/cities.seed';
 import { SeedCategories } from '../../src/database/seeds/categories.seed';
 import { PasswordHasher } from '../../src/shared/password/password-hasher';
 import { GEOCODING_SERVICE } from '../../src/common/constants/di-tokens';
-import type { IGeocodingService } from '../../src/modules/providers/geocoding/geocoding.service.interface';
+import type { IGeocodingService } from '../../src/modules/infra/geocoding/geocoding.service.interface';
 
 jest.setTimeout(180000);
 
@@ -123,6 +123,14 @@ describe('Repair request main flow', () => {
     const geocodingStub: IGeocodingService = {
       Geocode: () =>
         Promise.resolve({ latitude: '42.4304', longitude: '19.2594' }),
+      ReverseGeocode: () =>
+        Promise.resolve({
+          city: 'Podgorica',
+          town: null,
+          village: null,
+          municipality: null,
+          county: null,
+        }),
     };
 
     const moduleFixture = await Test.createTestingModule({

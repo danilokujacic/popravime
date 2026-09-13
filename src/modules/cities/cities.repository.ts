@@ -29,6 +29,10 @@ export class CitiesRepository {
     return this.repository.findOne({ where: { id } });
   }
 
+  FindBySlug(slug: string): Promise<City | null> {
+    return this.repository.findOne({ where: { slug } });
+  }
+
   async IncrementProviderCount(cityId: string): Promise<void> {
     await this.repository.increment({ id: cityId }, 'providerCount', 1);
   }
