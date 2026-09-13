@@ -20,6 +20,22 @@ export interface OfferAcceptedJobPayload {
   to: string;
   providerName: string;
   requestId: string;
+  // Contact info matters more than the in-app chat here — put it straight in the email rather
+  // than making the provider log in and open a conversation thread to get it.
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string | null;
+  previewUrl: string;
+}
+
+export interface OfferAcceptedCustomerJobPayload {
+  to: string;
+  customerName: string;
+  providerName: string;
+  providerEmail: string | null;
+  providerPhone: string | null;
+  providerWebsite: string | null;
+  previewUrl: string;
 }
 
 export interface StatusChangeJobPayload {
@@ -73,6 +89,10 @@ export type EmailJob =
   | { kind: 'welcome'; payload: WelcomeJobPayload }
   | { kind: 'offer-received'; payload: OfferReceivedJobPayload }
   | { kind: 'offer-accepted'; payload: OfferAcceptedJobPayload }
+  | {
+      kind: 'offer-accepted-customer';
+      payload: OfferAcceptedCustomerJobPayload;
+    }
   | { kind: 'status-change'; payload: StatusChangeJobPayload }
   | { kind: 'review-created'; payload: ReviewCreatedJobPayload }
   | { kind: 'verification-approved'; payload: VerificationApprovedJobPayload }

@@ -11,6 +11,7 @@ import {
 import { BuildWelcomeEmail } from './templates/welcome.template';
 import { BuildOfferReceivedEmail } from './templates/offer-received.template';
 import { BuildOfferAcceptedEmail } from './templates/offer-accepted.template';
+import { BuildOfferAcceptedCustomerEmail } from './templates/offer-accepted-customer.template';
 import { BuildStatusChangeEmail } from './templates/status-change.template';
 import { BuildReviewCreatedEmail } from './templates/review-created.template';
 import { BuildVerificationApprovedEmail } from './templates/verification-approved.template';
@@ -33,6 +34,11 @@ function BuildContent(job: EmailJob): EmailContent {
       return { to: job.payload.to, ...BuildOfferReceivedEmail(job.payload) };
     case 'offer-accepted':
       return { to: job.payload.to, ...BuildOfferAcceptedEmail(job.payload) };
+    case 'offer-accepted-customer':
+      return {
+        to: job.payload.to,
+        ...BuildOfferAcceptedCustomerEmail(job.payload),
+      };
     case 'status-change':
       return { to: job.payload.to, ...BuildStatusChangeEmail(job.payload) };
     case 'review-created':

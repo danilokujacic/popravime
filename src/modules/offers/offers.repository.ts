@@ -38,6 +38,7 @@ export class OffersRepository {
           status: filter.status ?? null,
         },
       )
+      .leftJoinAndSelect('offer.provider', 'provider')
       .orderBy('offer.createdAt', 'DESC')
       .skip((page - 1) * limit)
       .take(limit);
@@ -47,7 +48,10 @@ export class OffersRepository {
   }
 
   FindById(id: string): Promise<Offer | null> {
-    return this.repository.findOne({ where: { id } });
+    return this.repository.findOne({
+      where: { id },
+      relations: { provider: true },
+    });
   }
 
   FindOtherPending(

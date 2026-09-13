@@ -10,6 +10,7 @@ export enum NotificationType {
   NewMessage = 'new_message',
   NewInquiry = 'new_inquiry',
   NewRepairRequest = 'new_repair_request',
+  OfferAcceptedConfirmation = 'offer_accepted_confirmation',
 }
 
 export interface NotifyInput {

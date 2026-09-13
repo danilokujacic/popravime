@@ -45,26 +45,38 @@ export class OffersController {
   @Get()
   async List(
     @Query() query: ListOffersQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<PaginatedResult<OfferResponseDto>> {
-    const result = await this.offersService.List(
+    const result = await this.offersService.ListForViewer(
       {
         requestId: query.requestId,
         providerId: query.providerId,
         status: query.status,
       },
+      user,
       query.page,
       query.limit,
     );
 
-    return { ...result, items: result.items.map(OfferResponseMapper.ToDto) };
+    const items = await Promise.all(
+      result.items.map(async (offer) => {
+        const customerContact =
+          await this.offersService.ResolveCustomerContactForOffer(offer, user);
+        return OfferResponseMapper.ToDto(offer, customerContact);
+      }),
+    );
+    return { ...result, items };
   }
 
   @Get(':id')
   async FindOne(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<OfferResponseDto> {
-    const offer = await this.offersService.FindById(id);
-    return OfferResponseMapper.ToDto(offer);
+    const offer = await this.offersService.FindByIdForViewer(id, user);
+    const customerContact =
+      await this.offersService.ResolveCustomerContactForOffer(offer, user);
+    return OfferResponseMapper.ToDto(offer, customerContact);
   }
 
   @Post()

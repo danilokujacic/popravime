@@ -11,6 +11,7 @@ import {
   VerificationStatus,
 } from '../providers/providers.types';
 import { verificationConfig } from '../../config/verification.config';
+import { appConfig } from '../../config/app.config';
 import { RequestStatus } from '../repair-requests/repair-requests.types';
 import { IOffersService } from './offers.service.interface';
 import { OfferStatusTransitions } from './state/offer-status.transitions';
@@ -19,6 +20,9 @@ import { RepairRequestsService } from '../repair-requests/repair-requests.servic
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/notifications.types';
+import { UserRole } from '../users/users.types';
+import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
+import { CustomerContactDto } from './dto/customer-contact.dto';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
@@ -34,6 +38,8 @@ export class OffersService implements IOffersService {
     private readonly notificationsService: NotificationsService,
     @Inject(verificationConfig.KEY)
     private readonly verification: ConfigType<typeof verificationConfig>,
+    @Inject(appConfig.KEY)
+    private readonly app: ConfigType<typeof appConfig>,
     @InjectPinoLogger(OffersService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -59,6 +65,9 @@ export class OffersService implements IOffersService {
       partsType: input.partsType,
       message: input.message ?? null,
     });
+    // Already fetched and validated above — avoids a redundant round trip to hydrate the
+    // relation the response mapper needs.
+    offer.provider = provider;
 
     await this.repairRequestsService.MarkOffersReceived(input.requestId);
 
@@ -124,6 +133,10 @@ export class OffersService implements IOffersService {
     const providerOwner = await this.usersService.FindById(
       provider.ownerUserId,
     );
+    const customer = await this.usersService.FindById(customerId);
+
+    // Contact info matters more than the in-app chat here — both sides get it straight in the
+    // acceptance email, not just unlocked behind a login + conversation thread.
     await this.notificationsService.Notify({
       userId: providerOwner.id,
       type: NotificationType.OfferAccepted,
@@ -137,6 +150,31 @@ export class OffersService implements IOffersService {
           to: providerOwner.email,
           providerName: provider.businessName,
           requestId: offer.requestId,
+          customerName: customer.fullName,
+          customerEmail: customer.email,
+          customerPhone: customer.phone,
+          previewUrl: `${this.app.frontendUrl}/provider/requests/${offer.requestId}`,
+        },
+      },
+    });
+
+    await this.notificationsService.Notify({
+      userId: customer.id,
+      type: NotificationType.OfferAcceptedConfirmation,
+      title: 'You accepted an offer',
+      body: `${provider.businessName} accepted — here's how to reach them`,
+      relatedEntityType: 'offer',
+      relatedEntityId: offer.id,
+      email: {
+        kind: 'offer-accepted-customer',
+        payload: {
+          to: customer.email,
+          customerName: customer.fullName,
+          providerName: provider.businessName,
+          providerEmail: provider.email,
+          providerPhone: provider.phone,
+          providerWebsite: provider.website,
+          previewUrl: `${this.app.frontendUrl}/dashboard/requests/${offer.requestId}`,
         },
       },
     });
@@ -151,6 +189,7 @@ export class OffersService implements IOffersService {
       'Offer accepted',
     );
 
+    savedOffer.provider = provider;
     return savedOffer;
   }
 
@@ -205,6 +244,101 @@ export class OffersService implements IOffersService {
     return this.offersRepository.List(filter, page, limit);
   }
 
+  // §7.3-adjacent: unlike FindById/List above (used internally by other services that already
+  // enforce their own authorization), these two are what the controller calls directly — every
+  // offer a provider can reach through them is guaranteed to be their own, which is what lets
+  // ResolveCustomerContactForOffer below skip a second ownership check.
+  async ListForViewer(
+    filter: ListOffersFilter,
+    viewer: AuthenticatedUser,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedResult<Offer>> {
+    const scoped = await this.ScopeFilterToViewer(filter, viewer);
+    return this.offersRepository.List(scoped, page, limit);
+  }
+
+  async FindByIdForViewer(
+    id: string,
+    viewer: AuthenticatedUser,
+  ): Promise<Offer> {
+    const offer = await this.FindById(id);
+    await this.EnsureOfferViewable(offer, viewer);
+    return offer;
+  }
+
+  // Only an offer's own provider owner (or an admin) ever gets the customer's contact details,
+  // and only once it's actually Accepted — a pending/rejected/withdrawn offer never carries this,
+  // and a customer viewing their own offers never needs it (it's their own information).
+  async ResolveCustomerContactForOffer(
+    offer: Offer,
+    viewer: AuthenticatedUser,
+  ): Promise<CustomerContactDto | null> {
+    if (offer.status !== OfferStatus.Accepted) return null;
+    if (viewer.role === UserRole.Customer) return null;
+
+    const request = await this.repairRequestsService.FindById(offer.requestId);
+    const customer = await this.usersService.FindById(request.customerId);
+    return {
+      fullName: customer.fullName,
+      email: customer.email,
+      phone: customer.phone,
+    };
+  }
+
+  private async ScopeFilterToViewer(
+    filter: ListOffersFilter,
+    viewer: AuthenticatedUser,
+  ): Promise<ListOffersFilter> {
+    if (viewer.role === UserRole.Admin) {
+      return filter;
+    }
+    if (viewer.role === UserRole.ProviderOwner) {
+      const provider = await this.providersService.GetForUser(viewer.id);
+      return { ...filter, providerId: provider.id };
+    }
+    if (!filter.requestId) {
+      throw new DomainForbiddenException(
+        'OFFERS_REQUEST_ID_REQUIRED',
+        'A request_id is required to list your offers',
+      );
+    }
+    const request = await this.repairRequestsService.FindById(filter.requestId);
+    if (request.customerId !== viewer.id) {
+      throw new DomainForbiddenException(
+        'REPAIR_REQUEST_NOT_OWNED',
+        'You do not own this repair request',
+      );
+    }
+    return filter;
+  }
+
+  private async EnsureOfferViewable(
+    offer: Offer,
+    viewer: AuthenticatedUser,
+  ): Promise<void> {
+    if (viewer.role === UserRole.Admin) {
+      return;
+    }
+    if (viewer.role === UserRole.ProviderOwner) {
+      const provider = await this.providersService.GetForUser(viewer.id);
+      if (offer.providerId !== provider.id) {
+        throw new DomainForbiddenException(
+          'OFFER_NOT_OWNED',
+          'You do not own this offer',
+        );
+      }
+      return;
+    }
+    const request = await this.repairRequestsService.FindById(offer.requestId);
+    if (request.customerId !== viewer.id) {
+      throw new DomainForbiddenException(
+        'OFFER_NOT_OWNED',
+        'You do not own this offer',
+      );
+    }
+  }
+
   private EnsureAcceptingOffers(status: RequestStatus): void {
     const acceptsOffers =
       status === RequestStatus.Open || status === RequestStatus.OffersReceived;
@@ -228,9 +362,7 @@ export class OffersService implements IOffersService {
     }
   }
 
-  private EnsureProviderEligible(
-    verificationStatus: VerificationStatus,
-  ): void {
+  private EnsureProviderEligible(verificationStatus: VerificationStatus): void {
     if (
       !IsEligibleVerificationStatus(
         verificationStatus,
