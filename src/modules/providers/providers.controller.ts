@@ -30,7 +30,19 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { UserRole } from '../users/users.types';
-import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+
+/**
+ * GET /providers' own list envelope — `data`/`count`, not the generic `PaginatedResult`
+ * `items`/`total` every other paginated endpoint in this API uses. Deliberately provider-specific
+ * (frontend request): don't reuse/rename the shared `PaginatedResult<T>` interface for this, that
+ * would ripple the rename into repair-requests/offers/reviews/etc, which stay on `items`/`total`.
+ */
+interface ProviderListResponse {
+  data: ProviderResponseDto[];
+  count: number;
+  page: number;
+  limit: number;
+}
 
 @Controller('providers')
 export class ProvidersController {
@@ -54,7 +66,7 @@ export class ProvidersController {
   @Get()
   async List(
     @Query() query: ListProvidersQueryDto,
-  ): Promise<PaginatedResult<ProviderResponseDto>> {
+  ): Promise<ProviderListResponse> {
     const result = await this.providersService.List(
       {
         cityId: query.cityId,
@@ -65,7 +77,12 @@ export class ProvidersController {
       query.limit,
     );
 
-    return { ...result, items: result.items.map(ProviderResponseMapper.ToDto) };
+    return {
+      data: result.items.map(ProviderResponseMapper.ToDto),
+      count: result.total,
+      page: result.page,
+      limit: result.limit,
+    };
   }
 
   @Public()

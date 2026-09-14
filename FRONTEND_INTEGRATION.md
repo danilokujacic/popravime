@@ -96,6 +96,11 @@ Not every list endpoint is paginated — several (categories, cities, FAQ items,
 provider gallery) return a bare array since they're small, fully-cacheable reference/owned-scope
 lists. Each endpoint below is marked paginated or not.
 
+**Exception — `GET /providers`:** this one endpoint uses `data`/`count` instead of `items`/
+`total` (`{data: [...], count: 142, page: 1, limit: 20}`). Every other paginated endpoint in this
+API (repair requests, offers, reviews, notifications, etc.) still uses the `items`/`total` shape
+above — don't generalize this rename, it's provider-list-specific.
+
 ### 1.3 Roles
 
 Three roles exist: `customer`, `provider_owner`, `admin`. A user's role is fixed at
@@ -266,9 +271,16 @@ than re-fetching on every screen that needs a city/category picker.
 | GET | `/cities/:id` | public | |
 | GET | `/cities/lookup-by-coordinates` | public, throttled | query: `latitude`, `longitude` (both required, decimal degree strings). See below. |
 | GET | `/categories` | public | query: `parent_category_id?` (for subcategory drill-down). Not paginated. |
+| GET | `/categories/with-counts` | public | registered ahead of `/categories/:id` — no query params. Not paginated. |
 | GET | `/categories/:id` | public | |
 
 City shape: `{id, name, slug, region, is_active, provider_count}`.
+
+`GET /categories/with-counts` returns every category (flat, same ordering as plain `GET
+/categories`) with one extra field: `{id, slug, icon_url, parent_category_id, provider_count}`.
+`provider_count` is a single grouped SQL `COUNT` (`CategoriesRepository.ListWithProviderCounts`),
+filtered by the same eligibility rule (`EligibleStatuses`) the public provider directory itself
+uses, cached 5 minutes (counts move more often than the category list, which is cached an hour).
 
 ### 4.1 Resolve a city from a map point
 
@@ -296,7 +308,7 @@ price-estimates), it's always the `id` — resolve the display name client-side 
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/providers` | public | paginated; query: `city_id?`, `category_id?`, `search?` (business name substring), `verification_status?` (accepted but has no effect, see below), `page`, `limit` |
+| GET | `/providers` | public | paginated (`data`/`count`, see §1.2 exception); query: `city_id?`, `category_id?`, `search?` (business name substring), `verification_status?` (accepted but has no effect, see below), `page`, `limit` |
 | GET | `/providers/:id` | public | |
 | GET | `/providers/slug/:slug` | public | for pretty provider-profile URLs |
 | POST | `/providers` | `provider_owner` | creates the caller's own provider profile — see below |

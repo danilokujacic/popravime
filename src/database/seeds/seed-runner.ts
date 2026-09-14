@@ -5,6 +5,7 @@ import { SeedCategories } from './categories.seed';
 import { SeedAdmin } from './admin.seed';
 import { SeedProvider } from './provider.seed';
 import { SeedCustomer } from './customer.seed';
+import { SeedFaqItems } from './faq-items.seed';
 
 async function RunSeeds(): Promise<void> {
   await AppDataSource.initialize();
@@ -14,6 +15,7 @@ async function RunSeeds(): Promise<void> {
   await SeedAdmin(AppDataSource);
   await SeedProvider(AppDataSource);
   await SeedCustomer(AppDataSource);
+  await SeedFaqItems(AppDataSource);
 
   await AppDataSource.destroy();
 }
