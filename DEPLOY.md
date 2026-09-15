@@ -4,16 +4,18 @@ Target stack: **Hetzner** VM (Docker Compose) + **Neon** Postgres + **Cloudflare
 object storage) + a **local Redis** container on the Hetzner VM + **nginx** as the reverse proxy /
 TLS terminator + self-hosted **Loki**/**Grafana** for logs.
 
-This assumes `docker-compose.yml`'s `api`/`nginx` services and `nginx/nginx.conf`'s TLS
+This assumes `docker-compose.prod.yml`'s `api`/`nginx` services and `nginx/nginx.conf`'s TLS
 termination (see `openspec/changes/mvp-production-readiness/`) are already merged.
 
-> **Known gap as of this writing**: `docker-compose.yml` currently has **no `api` or `nginx`
-> service** — they were added by `mvp-production-readiness` (and marked done there) but a later
-> commit (`c1e2b79`, message "fix") deleted both services and the `edge` network while otherwise
-> making good security fixes (binding ports to `127.0.0.1`, `profiles: [ local ]`, `restart:
-> unless-stopped`) that were kept. This runbook, and §4a below, describe the intended end state;
-> restore the `api`/`nginx` services (`git show 3d1a1be -- docker-compose.yml` shows their prior
-> shape) before following steps 10+ for a real deploy.
+Production and local dev now live in two separate compose files — `docker-compose.prod.yml`
+(api, nginx, redis, loki, grafana — everything this runbook deploys) and `docker-compose.yml`
+(postgres, redis, minio, maildev — local dev infra only, not deployed here). Every `docker
+compose` command below targets the former with `-f docker-compose.prod.yml`.
+
+> Historical note: `api`/`nginx` briefly didn't exist in this repo's compose setup at all — added
+> by `mvp-production-readiness`, then deleted by a later "fix" commit (`c1e2b79`) along with the
+> `edge` network. Restored (and split into `docker-compose.prod.yml`) since; if you're reading an
+> old checkout without that file, `git show 3d1a1be -- docker-compose.yml` has their prior shape.
 
 ## 1. Neon (Postgres)
 
@@ -40,7 +42,7 @@ termination (see `openspec/changes/mvp-production-readiness/`) are already merge
    an SSH tunnel (`ssh -L 4200:127.0.0.1:4200 you@your-domain.tld`, then
    `http://localhost:4200` locally), never opened on the firewall.
 3. Create a non-root deploy user with SSH key auth; disable password SSH login.
-4. Clone the repo onto the VM (or push a built image — either way, `docker-compose.yml` and
+4. Clone the repo onto the VM (or push a built image — either way, `docker-compose.prod.yml` and
    `nginx/nginx.conf` need to be present on the host).
 
 ## 4. DNS
@@ -61,8 +63,8 @@ plugin once on the Hetzner host:
 docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
 ```
 
-Once `api` exists in `docker-compose.yml` again (see the gap noted above), give it this
-`logging:` block:
+`docker-compose.prod.yml`'s `api` service already has this `logging:` block — shown here for
+reference:
 
 ```yaml
   api:
@@ -85,9 +87,9 @@ Once `api` exists in `docker-compose.yml` again (see the gap noted above), give 
 container's log writes (worst case, the app itself). Under this mode, the worst case if Loki is
 down is dropped log lines, never a stalled app.
 
-**Once this block is applied**, `docker compose logs api` (used in §11 below) stops returning
-anything — Docker only supports one logging driver per container, and this replaces the default
-`json-file` one. Switch that verification step to a Loki query instead (§11 already shows both).
+Because this block is always active, `docker compose logs api` (the default `json-file` driver's
+command) never returns anything — Docker only supports one logging driver per container. §11's
+verification step uses a Loki query instead.
 
 ## 5. TLS certificate
 
@@ -101,7 +103,7 @@ sudo certbot certonly --webroot \
   -d your-domain.tld
 ```
 
-This writes the cert to `/etc/letsencrypt/live/your-domain.tld/`, which `docker-compose.yml`
+This writes the cert to `/etc/letsencrypt/live/your-domain.tld/`, which `docker-compose.prod.yml`
 already bind-mounts read-only into the `nginx` container. Confirm renewal is automated
 (certbot's own systemd timer/cron, already installed by the package on most distros):
 
@@ -132,12 +134,12 @@ Copy `.env.example` to `.env` on the Hetzner host and fill in real values:
 
 ## 7. Local infra on the VM
 
-Redis, Loki, and Grafana all run as local containers in production (Postgres/MinIO/Maildev stay
-dev-only, per `docker-compose.yml`'s own comments — production points at Neon/R2/a real SMTP
+Redis, Loki, and Grafana all run as local containers in production (Postgres/MinIO/Maildev live
+only in `docker-compose.yml`, the local-dev file — production points at Neon/R2/a real SMTP
 relay instead):
 
 ```bash
-docker compose up -d redis loki grafana
+docker compose -f docker-compose.prod.yml up -d redis loki grafana
 ```
 
 Bring these up **before** `api` (§10) — `depends_on: loki: condition: service_healthy` on `api`
@@ -164,11 +166,12 @@ Idempotent — safe to re-run.
 ## 10. Bring up the stack
 
 ```bash
-docker compose up -d --build api nginx
+docker compose -f docker-compose.prod.yml up -d --build api nginx
 ```
 
-(Postgres/MinIO/Maildev are not started in production — `docker-compose.override.yml` is
-dev-only and should not be deployed to the Hetzner host, or should simply not exist there.)
+(Postgres/MinIO/Maildev don't exist in `docker-compose.prod.yml` at all — they're only ever in
+`docker-compose.yml`, the local-dev file, which should not be deployed to the Hetzner host, or
+should simply not exist there.)
 
 ## 11. Verify the rollout
 
@@ -179,11 +182,10 @@ curl https://your-domain.tld/health
 Expect `"status":"ok"` with both `database` and `redis` reporting `"up"`. Also check for a clean
 startup with no Joi env-validation errors:
 
-- **Before** applying the Loki logging driver (§4a): `docker compose logs api`.
-- **After** applying it: query Loki instead, since `docker compose logs api` no longer returns
-  anything once the driver is attached —
-  `docker compose exec loki wget -qO- 'http://localhost:3100/loki/api/v1/query_range?query={job="popravime-api"}'`,
-  or open Grafana (over the SSH tunnel from §3) and use Explore with the same query.
+Query Loki for it (the Loki logging driver in §4a means `docker compose logs api` never returns
+anything):
+`docker compose -f docker-compose.prod.yml exec loki wget -qO- 'http://localhost:3100/loki/api/v1/query_range?query={job="popravime-api"}'`,
+or open Grafana (over the SSH tunnel from §3) and use Explore with the same query.
 
 Treat a failing health check as a failed rollout — don't consider the deploy live (see spec:
 Health-check-gated rollout).
@@ -204,8 +206,8 @@ email), and confirm the failure — provider error code, rejected recipient, no 
 ## 13. Rollback
 
 - Tag Docker images by git SHA before each deploy so the previous image is always available.
-- If the health check or smoke test fails: `docker compose up -d --no-deps` the previous image
-  tag for `api` and investigate before retrying.
+- If the health check or smoke test fails: `docker compose -f docker-compose.prod.yml up -d
+  --no-deps` the previous image tag for `api` and investigate before retrying.
 - If a migration needs reverting: `pnpm typeorm -- migration:revert`, or fall back to Neon's
   point-in-time restore for data-level issues.
 - Loki/Grafana are purely additive observability — dropping the `loki`/`grafana` services and
@@ -215,6 +217,7 @@ email), and confirm the failure — provider error code, rejected recipient, no 
 
 ## Known limitation
 
-A single Hetzner VM with `docker compose up -d --build api` is not zero-downtime — there's a
-brief restart gap while the new `api` container starts. Acceptable for an MVP's first launches;
-revisit (blue/green, a second VM, etc.) if downtime during deploys becomes a problem.
+A single Hetzner VM with `docker compose -f docker-compose.prod.yml up -d --build api` is not
+zero-downtime — there's a brief restart gap while the new `api` container starts. Acceptable for
+an MVP's first launches; revisit (blue/green, a second VM, etc.) if downtime during deploys
+becomes a problem.

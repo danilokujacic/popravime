@@ -42,16 +42,12 @@ pnpm run start:dev
 
 The API listens on `PORT` (default `3000`); Swagger docs are served at `/docs`.
 
-To run the full stack (including the API itself and nginx) in containers:
-
-```bash
-docker compose up --build
-```
-
-`postgres` in `docker-compose.yml` is **local development only** — production points at a
-managed cloud Postgres instance, not this container.
-
-For a full production deploy (Hetzner + Neon + Cloudflare R2 + nginx), see `DEPLOY.md`.
+`docker-compose.yml` is **local development infra only** (Postgres, Redis, MinIO, Maildev) — the
+API itself runs on the host via `pnpm start:dev` above, not in a container, during normal
+development. Production uses a separate file, `docker-compose.prod.yml` (the API built from this
+repo's own `Dockerfile`, nginx, Redis, Loki, Grafana — no Postgres/MinIO/Maildev, production
+points at managed Neon/R2/a real SMTP relay instead). See `DEPLOY.md` for the full production
+deploy (Hetzner + Neon + Cloudflare R2 + nginx + self-hosted Loki/Grafana).
 
 ## Scripts
 

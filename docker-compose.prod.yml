@@ -1,0 +1,159 @@
+# Production stack for the deploy VPS: the Nest API (built from this repo's own multi-stage
+# Dockerfile), nginx in front of it as the public TLS-terminating reverse proxy, and the
+# self-hosted Redis/Loki/Grafana services the app depends on at runtime.
+#
+# Deliberately NOT here: postgres/minio/maildev — production uses managed Neon Postgres,
+# Cloudflare R2, and a real SMTP relay (Brevo) instead of local stand-ins for those. See
+# docker-compose.yml for the local-dev counterpart of this file.
+#
+# Usage on the VPS:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# `.env` next to this file must hold the REAL production values — DATABASE_HOST=<Neon host>,
+# DATABASE_SSL=true, STORAGE_ENDPOINT=<R2 endpoint>, EMAIL_HOST=<Brevo relay>,
+# CORS_ORIGIN=<real allow-list>, NODE_ENV=production, REDIS_PASSWORD, GRAFANA_ADMIN_PASSWORD,
+# ... — never the dev `.env` this repo runs against locally. NODE_ENV=production with an
+# empty/"*" CORS_ORIGIN fails fast at boot instead of silently allowing every origin
+# (src/config/env.validation.ts) — set a real one before the first deploy.
+#
+# Before first deploy: replace YOUR_DOMAIN in nginx/nginx.conf with the real domain, issue a
+# cert for it (see DEPLOY.md §5), and install the Loki Docker logging driver once on the host
+# (DEPLOY.md §4a) — `docker plugin install grafana/loki-docker-driver:latest --alias loki
+# --grant-all-permissions` — before this file's `api.logging` block below can attach to it.
+
+# Explicit project name so this never collides with docker-compose.yml's (dev) networks/volumes
+# if the two are ever run on the same host (they otherwise both default to the directory name).
+name: popravime-prod
+
+services:
+  # Production-safe by default: takes every app value straight from `env_file`, only REDIS_HOST/
+  # PORT are pinned here (containers never have a host port-conflict reason to override PORT).
+  # No host port is published for this service directly — nginx is the sole public entry point;
+  # api is reachable only from nginx over the `edge` network.
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks: [ edge, internal ]
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      PORT: '3000'
+    healthcheck:
+      test: [ 'CMD', 'node', '-e', "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    # Ships logs to the self-hosted `loki` container via Docker's own Loki logging driver
+    # rather than a sidecar or an in-process transport — see
+    # openspec/changes/add-grafana-loki-observability/design.md decision 2. `loki-url` targets
+    # the HOST's loopback (the logging driver runs at the Docker-daemon level, outside this
+    # container's own network namespace, so it reaches Loki via the published host port, not
+    # the `internal` Docker network `loki:3100` other containers use). `mode: non-blocking`
+    # matters: without it, a slow/unreachable Loki can stall the api container's log writes —
+    # worst case, the app itself. Under this mode, Loki being down just drops log lines.
+    #
+    # Once this is active, `docker compose logs api` stops returning anything (Docker only
+    # supports one logging driver per container) — use a Loki query instead (DEPLOY.md §11).
+    logging:
+      driver: loki
+      options:
+        loki-url: 'http://127.0.0.1:4201/loki/api/v1/push'
+        loki-external-labels: 'job=popravime-api,env=production'
+        mode: non-blocking
+        max-buffer-size: 4m
+
+  # The public entry point — TLS termination + reverse proxy to `api` (see nginx/nginx.conf).
+  # `edge` is the only network shared with `api`; nginx never touches redis/loki/grafana
+  # directly.
+  nginx:
+    image: nginx:alpine
+    networks: [ edge ]
+    restart: unless-stopped
+    depends_on: [ api ]
+    ports: [ '80:80', '443:443' ]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # TLS certificates issued on the host (certbot in webroot mode), mounted read-only.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # certbot's HTTP-01 webroot: a bind mount (not a named volume) so the host's own certbot
+      # process and this container see the same challenge files.
+      - ./certbot-webroot:/var/www/certbot
+
+  redis:
+    image: redis:7-alpine
+    command: [ 'redis-server', '--requirepass', '${REDIS_PASSWORD:?REDIS_PASSWORD is required}' ]
+    networks: [ internal ]
+    restart: unless-stopped
+    ports: [ '127.0.0.1:6379:6379' ]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: [ 'CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', '--no-auth-warning', 'ping' ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Self-hosted log storage — see the `api` service's `logging` block above for how logs reach
+  # it. Bound to loopback only (127.0.0.1:4201); never exposed publicly.
+  loki:
+    image: grafana/loki:2.9.8
+    networks: [ internal ]
+    restart: unless-stopped
+    ports: [ '127.0.0.1:4201:3100' ]
+    command: [ '-config.file=/etc/loki/loki-config.yaml' ]
+    volumes:
+      - lokidata:/loki
+      - ./loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+    healthcheck:
+      test: [ 'CMD-SHELL', 'wget -q --spider http://localhost:3100/ready || exit 1' ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Self-hosted log visualization, pre-provisioned with the Loki datasource and the "Email
+  # pipeline" dashboard. Bound to the loopback interface only — reach it over an SSH tunnel
+  # (`ssh -L 4200:127.0.0.1:4200 you@host`, then http://localhost:4200), never opened on the
+  # firewall (see design.md decision 1, DEPLOY.md §2).
+  grafana:
+    image: grafana/grafana:10.4.2
+    networks: [ internal ]
+    restart: unless-stopped
+    depends_on:
+      loki:
+        condition: service_healthy
+    ports: [ '127.0.0.1:4200:3000' ]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    healthcheck:
+      test: [ 'CMD-SHELL', 'wget -q --spider http://localhost:3000/api/health || exit 1' ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+networks:
+  # api <-> nginx only. Kept separate from `internal` so nginx has no path to redis/loki/grafana.
+  edge:
+    driver: bridge
+  # api <-> redis/loki (admin-only services never published beyond loopback).
+  internal:
+    driver: bridge
+
+volumes:
+  redisdata:
+  lokidata:
+  grafanadata:
