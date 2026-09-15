@@ -45,9 +45,9 @@ The API listens on `PORT` (default `3000`); Swagger docs are served at `/docs`.
 `docker-compose.yml` is **local development infra only** (Postgres, Redis, MinIO, Maildev) — the
 API itself runs on the host via `pnpm start:dev` above, not in a container, during normal
 development. Production uses a separate file, `docker-compose.prod.yml` (the API built from this
-repo's own `Dockerfile`, nginx, Redis, Loki, Grafana — no Postgres/MinIO/Maildev, production
-points at managed Neon/R2/a real SMTP relay instead). See `DEPLOY.md` for the full production
-deploy (Hetzner + Neon + Cloudflare R2 + nginx + self-hosted Loki/Grafana).
+repo's own `Dockerfile`, Redis, Loki, Grafana — no Postgres/MinIO/Maildev, production points at
+managed Neon/R2/a real SMTP relay instead). nginx is **not** in that file — production reverse-
+proxies through nginx installed directly on the host, see `nginx/nginx.conf` and `DEPLOY.md`.
 
 ## Scripts
 

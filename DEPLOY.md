@@ -1,21 +1,23 @@
 # Production Deploy Runbook
 
-Target stack: **Hetzner** VM (Docker Compose) + **Neon** Postgres + **Cloudflare R2** (S3-compatible
-object storage) + a **local Redis** container on the Hetzner VM + **nginx** as the reverse proxy /
-TLS terminator + self-hosted **Loki**/**Grafana** for logs.
+Target stack: **Hetzner** VM (Docker Compose for the app + its infra) + **Neon** Postgres +
+**Cloudflare R2** (S3-compatible object storage) + a **local Redis** container on the Hetzner
+VM + the **host's own nginx** (installed directly on the VM, not containerized) as the reverse
+proxy / TLS terminator + self-hosted **Loki**/**Grafana** for logs.
 
-This assumes `docker-compose.prod.yml`'s `api`/`nginx` services and `nginx/nginx.conf`'s TLS
-termination (see `openspec/changes/mvp-production-readiness/`) are already merged.
+This assumes `docker-compose.prod.yml`'s `api` service and `nginx/nginx.conf` (installed into
+the host's nginx — see §5) are already in place.
 
 Production and local dev now live in two separate compose files — `docker-compose.prod.yml`
-(api, nginx, redis, loki, grafana — everything this runbook deploys) and `docker-compose.yml`
-(postgres, redis, minio, maildev — local dev infra only, not deployed here). Every `docker
-compose` command below targets the former with `-f docker-compose.prod.yml`.
+(api, redis, loki, grafana — everything Docker-based this runbook deploys; nginx runs on the
+host outside Docker) and `docker-compose.yml` (postgres, redis, minio, maildev — local dev infra
+only, not deployed here). Every `docker compose` command below targets the former with
+`-f docker-compose.prod.yml`.
 
-> Historical note: `api`/`nginx` briefly didn't exist in this repo's compose setup at all — added
-> by `mvp-production-readiness`, then deleted by a later "fix" commit (`c1e2b79`) along with the
-> `edge` network. Restored (and split into `docker-compose.prod.yml`) since; if you're reading an
-> old checkout without that file, `git show 3d1a1be -- docker-compose.yml` has their prior shape.
+> Historical note: an `api`/`nginx`-in-Docker setup briefly didn't exist in this repo's compose
+> setup at all — added by `mvp-production-readiness`, then deleted by a later "fix" commit
+> (`c1e2b79`) along with the `edge` network. `api` was restored into `docker-compose.prod.yml`;
+> `nginx` was deliberately left out of it in favor of the host's already-installed nginx instead.
 
 ## 1. Neon (Postgres)
 
@@ -93,25 +95,28 @@ verification step uses a Loki query instead.
 
 ## 5. TLS certificate
 
-On the Hetzner host (not in a container):
+Since nginx runs directly on the host here (not in Docker), this is regular host-nginx + certbot
+setup — no bind mounts, no webroot shared with a container:
 
 ```bash
-sudo apt-get install certbot
-mkdir -p /path/to/popravime/certbot-webroot
-sudo certbot certonly --webroot \
-  -w /path/to/popravime/certbot-webroot \
-  -d your-domain.tld
+sudo apt-get install certbot python3-certbot-nginx
+sudo certbot --nginx -d your-domain.tld
 ```
 
-This writes the cert to `/etc/letsencrypt/live/your-domain.tld/`, which `docker-compose.prod.yml`
-already bind-mounts read-only into the `nginx` container. Confirm renewal is automated
-(certbot's own systemd timer/cron, already installed by the package on most distros):
+(`--nginx` edits the host's nginx config and reloads it automatically; if you'd rather manage the
+cert issuance separately from nginx's config, `certbot certonly --webroot -w <your webroot> -d
+your-domain.tld` works the same as before, just against whatever webroot your existing nginx
+setup already serves `.well-known/acme-challenge/` from.) Confirm renewal is automated (certbot's
+own systemd timer/cron, already installed by the package on most distros):
 
 ```bash
 sudo systemctl list-timers | grep certbot
 ```
 
-In `nginx/nginx.conf`, replace every `YOUR_DOMAIN` placeholder with `your-domain.tld` (must match
+Install `nginx/nginx.conf` from this repo into the host's nginx (e.g.
+`/etc/nginx/sites-available/popravime`, symlinked into `sites-enabled`) if you haven't already,
+merging it with whatever else that host's nginx already serves. Replace every `YOUR_DOMAIN`
+placeholder with `your-domain.tld` (must match
 the cert exactly).
 
 ## 6. Secrets (`.env` on the host — never committed)
@@ -129,7 +134,7 @@ Copy `.env.example` to `.env` on the Hetzner host and fill in real values:
 | `CORS_ORIGIN` | The real frontend origin(s), comma-separated. Required and must not be empty/`*` — the app now fails fast at boot in production if this is missing (see spec: Production CORS allow-list) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Bootstrap admin account credentials |
 | `EMAIL_*` | A real SMTP relay — not Maildev |
-| `PORT` | Leave unset (defaults to `3000`) — nginx's upstream is hardcoded to port 3000 inside the Docker network |
+| `PORT` | Leave unset (defaults to `3000`) — `docker-compose.prod.yml` publishes it on `127.0.0.1:3000`, which the host nginx's upstream points at |
 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | Admin login for the self-hosted Grafana container — freshly generated, not the `.env.example` default |
 
 ## 7. Local infra on the VM
@@ -166,8 +171,12 @@ Idempotent — safe to re-run.
 ## 10. Bring up the stack
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build api nginx
+docker compose -f docker-compose.prod.yml up -d --build
 ```
+
+This brings up `api` (plus `redis`/`loki`/`grafana`) — not nginx, which isn't a service in this
+file; reload/restart the host's own nginx separately if you just changed its config
+(`sudo nginx -t && sudo systemctl reload nginx`).
 
 (Postgres/MinIO/Maildev don't exist in `docker-compose.prod.yml` at all — they're only ever in
 `docker-compose.yml`, the local-dev file, which should not be deployed to the Hetzner host, or

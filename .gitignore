@@ -55,5 +55,3 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-# certbot ACME HTTP-01 webroot (created on the deploy host, see DEPLOY.md)
-/certbot-webroot

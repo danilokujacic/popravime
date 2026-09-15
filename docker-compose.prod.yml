@@ -1,6 +1,9 @@
 # Production stack for the deploy VPS: the Nest API (built from this repo's own multi-stage
-# Dockerfile), nginx in front of it as the public TLS-terminating reverse proxy, and the
-# self-hosted Redis/Loki/Grafana services the app depends on at runtime.
+# Dockerfile) plus the self-hosted Redis/Loki/Grafana services the app depends on at runtime.
+#
+# No nginx service here — the host already has its own nginx installed, running outside Docker.
+# `api` publishes port 3000 on loopback (127.0.0.1:3000) for that host nginx to reverse-proxy to;
+# see nginx/nginx.conf for the config to install into the host's nginx (not consumed by Docker).
 #
 # Deliberately NOT here: postgres/minio/maildev — production uses managed Neon Postgres,
 # Cloudflare R2, and a real SMTP relay (Brevo) instead of local stand-ins for those. See
@@ -16,10 +19,10 @@
 # empty/"*" CORS_ORIGIN fails fast at boot instead of silently allowing every origin
 # (src/config/env.validation.ts) — set a real one before the first deploy.
 #
-# Before first deploy: replace YOUR_DOMAIN in nginx/nginx.conf with the real domain, issue a
-# cert for it (see DEPLOY.md §5), and install the Loki Docker logging driver once on the host
-# (DEPLOY.md §4a) — `docker plugin install grafana/loki-docker-driver:latest --alias loki
-# --grant-all-permissions` — before this file's `api.logging` block below can attach to it.
+# Before first deploy: point the host nginx at 127.0.0.1:3000 (see nginx/nginx.conf), issue a
+# TLS cert for the real domain (DEPLOY.md §5), and install the Loki Docker logging driver once
+# on the host (DEPLOY.md §4a) — `docker plugin install grafana/loki-docker-driver:latest --alias
+# loki --grant-all-permissions` — before this file's `api.logging` block below can attach to it.
 
 # Explicit project name so this never collides with docker-compose.yml's (dev) networks/volumes
 # if the two are ever run on the same host (they otherwise both default to the directory name).
@@ -28,14 +31,15 @@ name: popravime-prod
 services:
   # Production-safe by default: takes every app value straight from `env_file`, only REDIS_HOST/
   # PORT are pinned here (containers never have a host port-conflict reason to override PORT).
-  # No host port is published for this service directly — nginx is the sole public entry point;
-  # api is reachable only from nginx over the `edge` network.
+  # Published on loopback only (127.0.0.1:3000) — the host's own nginx (outside Docker) reverse-
+  # proxies to it from there; nothing but that host nginx should ever reach this port.
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    networks: [ edge, internal ]
+    networks: [ internal ]
     restart: unless-stopped
+    ports: [ '127.0.0.1:3000:3000' ]
     depends_on:
       redis:
         condition: service_healthy
@@ -69,23 +73,6 @@ services:
         loki-external-labels: 'job=popravime-api,env=production'
         mode: non-blocking
         max-buffer-size: 4m
-
-  # The public entry point — TLS termination + reverse proxy to `api` (see nginx/nginx.conf).
-  # `edge` is the only network shared with `api`; nginx never touches redis/loki/grafana
-  # directly.
-  nginx:
-    image: nginx:alpine
-    networks: [ edge ]
-    restart: unless-stopped
-    depends_on: [ api ]
-    ports: [ '80:80', '443:443' ]
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      # TLS certificates issued on the host (certbot in webroot mode), mounted read-only.
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-      # certbot's HTTP-01 webroot: a bind mount (not a named volume) so the host's own certbot
-      # process and this container see the same challenge files.
-      - ./certbot-webroot:/var/www/certbot
 
   redis:
     image: redis:7-alpine
@@ -146,10 +133,9 @@ services:
       start_period: 10s
 
 networks:
-  # api <-> nginx only. Kept separate from `internal` so nginx has no path to redis/loki/grafana.
-  edge:
-    driver: bridge
-  # api <-> redis/loki (admin-only services never published beyond loopback).
+  # api <-> redis/loki (admin-only services never published beyond loopback). The host's own
+  # nginx isn't a Docker container, so there's no need for a separate edge/internal split
+  # anymore — everything here talks to everything else on one network.
   internal:
     driver: bridge
 
