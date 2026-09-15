@@ -64,7 +64,7 @@ async function Bootstrap(): Promise<void> {
     SwaggerModule.setup('docs', app, document);
   }
 
-  await app.listen(config.port, '127.0.0.1');
+  await app.listen(config.port);
 }
 
 void Bootstrap();
