@@ -15,6 +15,12 @@ common:
   ring:
     kvstore:
       store: inmemory
+    # Single-node deployment, in-memory kvstore — the "ring" is a formality, not real
+    # clustering, so there's nothing to gain from Loki auto-detecting a network interface to
+    # advertise itself on (it tries eth0/en0/lo by name, and fails hard if none of those exist
+    # under that exact name in the container's network namespace — the actual failure mode this
+    # fixes). Pin it to loopback directly instead of relying on interface detection at all.
+    instance_addr: 127.0.0.1
 
 schema_config:
   configs:
