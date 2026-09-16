@@ -26,6 +26,7 @@ import type { AuthenticatedUser } from '../../common/interfaces/authenticated-re
 import {
   AUTH_THROTTLE,
   REFRESH_THROTTLE,
+  RESEND_CONFIRMATION_THROTTLE,
 } from '../infra/rate-limit/rate-limit.constants';
 import { CurrentRefreshSession } from './decorators/current-refresh-session.decorator';
 import type { RefreshTokenSession } from './interfaces/refresh-token-session.interface';
@@ -61,7 +62,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle(AUTH_THROTTLE)
+  @Throttle(RESEND_CONFIRMATION_THROTTLE)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('resend-confirmation')
   ResendConfirmation(@Body() dto: ResendConfirmationDto): Promise<void> {

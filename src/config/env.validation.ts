@@ -73,6 +73,10 @@ export const EnvValidationSchema = Joi.object({
   THROTTLE_CONTACT_MESSAGE_TTL_MS: Joi.number().default(60000),
   THROTTLE_GEOCODING_LIMIT: Joi.number().default(20),
   THROTTLE_GEOCODING_TTL_MS: Joi.number().default(60000),
+  // One resend click per IP per minute — separate from AUTH_THROTTLE (5/60s) since resend
+  // enqueues an actual email send, not just a credential check.
+  THROTTLE_RESEND_CONFIRMATION_LIMIT: Joi.number().default(1),
+  THROTTLE_RESEND_CONFIRMATION_TTL_MS: Joi.number().default(60000),
 
   GEOCODING_USER_AGENT: Joi.string().required(),
 

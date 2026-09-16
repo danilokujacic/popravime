@@ -5,6 +5,15 @@ export const AUTH_THROTTLE = {
   },
 };
 
+// One resend click per IP per minute — resend enqueues an actual email send, not just a
+// credential check, so it needs a tighter budget than AUTH_THROTTLE.
+export const RESEND_CONFIRMATION_THROTTLE = {
+  default: {
+    limit: Number(process.env.THROTTLE_RESEND_CONFIRMATION_LIMIT ?? 1),
+    ttl: Number(process.env.THROTTLE_RESEND_CONFIRMATION_TTL_MS ?? 60000),
+  },
+};
+
 // Separate, more generous budget for POST /auth/refresh — see env.validation.ts for why it can't
 // share AUTH_THROTTLE.
 export const REFRESH_THROTTLE = {
