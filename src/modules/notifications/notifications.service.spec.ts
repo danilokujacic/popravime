@@ -11,8 +11,8 @@ function BuildInput(overrides?: Partial<NotifyInput>): NotifyInput {
   return {
     userId: 'user-1',
     type: NotificationType.NewOffer,
-    title: 'New offer received',
-    body: 'Someone sent an offer',
+    messageKey: 'new_offer',
+    messageParams: { providerName: 'Test Provider' },
     email: {
       kind: 'welcome',
       payload: { to: 'user@popravime.me', fullName: 'Test User' },
@@ -26,8 +26,8 @@ function BuildNotification(input: NotifyInput): Notification {
     id: 'notification-1',
     userId: input.userId,
     type: input.type,
-    title: input.title,
-    body: input.body,
+    messageKey: input.messageKey,
+    messageParams: input.messageParams ?? null,
     relatedEntityType: input.relatedEntityType ?? null,
     relatedEntityId: input.relatedEntityId ?? null,
     isRead: false,

@@ -1,11 +1,14 @@
-import { NotificationType } from '../notifications.types';
+import {
+  NotificationMessageParams,
+  NotificationType,
+} from '../notifications.types';
 
 export class NotificationResponseDto {
   id: string;
   userId: string;
   type: NotificationType;
-  title: string;
-  body: string;
+  messageKey: string;
+  messageParams: NotificationMessageParams | null;
   relatedEntityType: string | null;
   relatedEntityId: string | null;
   isRead: boolean;

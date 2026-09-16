@@ -60,8 +60,8 @@ export class ReviewsService implements IReviewsService {
     await this.notificationsService.Notify({
       userId: providerOwner.id,
       type: NotificationType.NewReview,
-      title: 'New review received',
-      body: `You received a ${input.rating}-star review`,
+      messageKey: 'new_review',
+      messageParams: { rating: input.rating },
       relatedEntityType: 'review',
       relatedEntityId: review.id,
       email: {

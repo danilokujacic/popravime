@@ -10,8 +10,8 @@ export class NotificationResponseMapper {
     dto.id = notification.id;
     dto.userId = notification.userId;
     dto.type = notification.type;
-    dto.title = notification.title;
-    dto.body = notification.body;
+    dto.messageKey = notification.messageKey;
+    dto.messageParams = notification.messageParams;
     dto.relatedEntityType = notification.relatedEntityType;
     dto.relatedEntityId = notification.relatedEntityId;
     dto.isRead = notification.isRead;

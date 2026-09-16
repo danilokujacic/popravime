@@ -580,21 +580,49 @@ Polling-based (no WebSocket/push — see §11).
 | GET | `/notifications` | any authenticated | paginated, caller's own only |
 | PATCH | `/notifications/:id/read` | any authenticated, own only | |
 
-Response shape: `{id, user_id, type, title, body, related_entity_type, related_entity_id,
-is_read, created_at}`. `type` is one of: `new_offer`, `offer_accepted`, `status_change`,
+Response shape: `{id, user_id, type, message_key, message_params, related_entity_type,
+related_entity_id, is_read, created_at}`. There is no rendered `title`/`body` text anymore — the
+backend sends a `message_key` (a stable string identifying the exact message template) plus
+`message_params` (a flat object of the variables that template needs, or `null` when the
+template takes none), and the frontend is responsible for looking up `message_key` in its own
+i18n messages and interpolating `message_params` into it. This is what lets notifications respect
+the site's locale toggle, which they couldn't when the backend sent pre-rendered English strings.
+
+`type` is unchanged and still one of: `new_offer`, `offer_accepted`, `status_change`,
 `new_review`, `verification_approved`, `verification_rejected`, `new_message`, `new_inquiry`,
 `new_repair_request` (provider-facing — sent to every eligible provider in a request's category
 the moment it's approved and becomes visible; `related_entity_id` is the repair request's id, so
 this routes to `/provider/requests/:id` the same way `new_offer` does),
 `offer_accepted_confirmation` (customer-facing counterpart to `offer_accepted` — fired at the
 same moment, `related_entity_id` is the offer's id; §7.2/§7.3 for why this one matters more than
-usual — it's the signal to surface the provider's contact info).
-`related_entity_type`/`related_entity_id` (both nullable) are a hint for deep-linking — e.g. a
-`new_offer` notification's `related_entity_id` is the offer's id, so tapping the notification
-can route straight to that offer/request. The frontend should build a mapping from `type` to
-"where does tapping this notification navigate" using these two fields, plus a simple
-unread-count indicator (count items where `is_read: false` from the list, or track it
-separately — there's no dedicated unread-count endpoint).
+usual — it's the signal to surface the provider's contact info). Keep using `type` for
+deep-linking (see below) — `message_key` is for message text only.
+
+`message_key` / `message_params` per `type` (`status_change` is the one `type` that covers three
+different messages — disambiguate by `message_key`, not `type`, when deciding which string to
+render):
+
+| `type` | `message_key` | `message_params` |
+|---|---|---|
+| `new_offer` | `new_offer` | `{ provider_name }` |
+| `offer_accepted` | `offer_accepted` | *(none — `related_entity_id` already carries the request id for deep-linking; it isn't shown as text)* |
+| `offer_accepted_confirmation` | `offer_accepted_confirmation` | `{ provider_name }` |
+| `status_change` | `repair_request_approved` | *(none)* |
+| `status_change` | `repair_request_rejected` | *(none)* |
+| `status_change` | `repair_request_status_changed` | `{ status }` (raw `RepairRequestStatus` enum value) |
+| `new_repair_request` | `new_repair_request` | `{ category_slug, city_name }` — **slug, not name**: resolve the display label the same way the rest of the app resolves category text from a slug, don't send the slug itself to the user |
+| `new_inquiry` | `new_inquiry` | `{ sender_name }` |
+| `verification_approved` | `verification_approved` | *(none)* |
+| `verification_rejected` | `verification_rejected` | *(none)* |
+| `new_review` | `new_review` | `{ rating }` (1–5) |
+| `new_message` | `new_message` | `{ sender_name }` |
+
+`related_entity_type`/`related_entity_id` (both nullable) are unaffected by this change and are
+still a hint for deep-linking — e.g. a `new_offer` notification's `related_entity_id` is the
+offer's id, so tapping the notification can route straight to that offer/request. The frontend
+should build a mapping from `type` to "where does tapping this notification navigate" using these
+two fields, plus a simple unread-count indicator (count items where `is_read: false` from the
+list, or track it separately — there's no dedicated unread-count endpoint).
 
 `new_repair_request` also sends an email with a direct "view the request" link
 (`{FRONTEND_URL}/provider/requests/:id`) to every eligible provider (verified, or pending when

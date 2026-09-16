@@ -167,8 +167,7 @@ export class VerificationRequestsService implements IVerificationRequestsService
       await this.notificationsService.Notify({
         userId: providerOwner.id,
         type: NotificationType.VerificationApproved,
-        title: 'Verification approved',
-        body: 'Your service is now certified',
+        messageKey: 'verification_approved',
         email: {
           kind: 'verification-approved',
           payload: { to: providerOwner.email, providerName },
@@ -180,8 +179,7 @@ export class VerificationRequestsService implements IVerificationRequestsService
     await this.notificationsService.Notify({
       userId: providerOwner.id,
       type: NotificationType.VerificationRejected,
-      title: 'Verification rejected',
-      body: 'Your verification request was not approved',
+      messageKey: 'verification_rejected',
       email: {
         kind: 'verification-rejected',
         payload: { to: providerOwner.email, providerName, reviewNotes },

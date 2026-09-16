@@ -8,7 +8,10 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { NotificationType } from '../notifications.types';
+import {
+  NotificationMessageParams,
+  NotificationType,
+} from '../notifications.types';
 
 @Index(['userId', 'isRead', 'createdAt'])
 @Entity('notifications')
@@ -31,11 +34,11 @@ export class Notification {
   })
   type: NotificationType;
 
-  @Column({ type: 'text' })
-  title: string;
+  @Column({ name: 'message_key', type: 'text' })
+  messageKey: string;
 
-  @Column({ type: 'text' })
-  body: string;
+  @Column({ name: 'message_params', type: 'jsonb', nullable: true })
+  messageParams: NotificationMessageParams | null;
 
   @Column({ name: 'related_entity_type', type: 'text', nullable: true })
   relatedEntityType: string | null;

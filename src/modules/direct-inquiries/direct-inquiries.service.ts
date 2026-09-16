@@ -53,8 +53,8 @@ export class DirectInquiriesService implements IDirectInquiriesService {
     await this.notificationsService.Notify({
       userId: providerOwner.id,
       type: NotificationType.NewInquiry,
-      title: 'New inquiry received',
-      body: `${senderName} sent you an inquiry`,
+      messageKey: 'new_inquiry',
+      messageParams: { senderName },
       relatedEntityType: 'direct_inquiry',
       relatedEntityId: inquiry.id,
       email: {

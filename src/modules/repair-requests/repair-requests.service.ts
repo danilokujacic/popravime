@@ -226,14 +226,10 @@ export class RepairRequestsService implements IRepairRequestsService {
     await this.notificationsService.Notify({
       userId: customer.id,
       type: NotificationType.StatusChange,
-      title:
+      messageKey:
         status === RequestStatus.Open
-          ? 'Repair request approved'
-          : 'Repair request rejected',
-      body:
-        status === RequestStatus.Open
-          ? 'Your repair request was approved and is now visible to providers'
-          : 'Your repair request was not approved',
+          ? 'repair_request_approved'
+          : 'repair_request_rejected',
       relatedEntityType: 'repair_request',
       relatedEntityId: request.id,
       email: {
@@ -267,8 +263,11 @@ export class RepairRequestsService implements IRepairRequestsService {
         this.notificationsService.Notify({
           userId: provider.ownerUserId,
           type: NotificationType.NewRepairRequest,
-          title: 'New repair request in your category',
-          body: `A new ${category.name} repair request was posted in ${city.name}`,
+          messageKey: 'new_repair_request',
+          messageParams: {
+            categorySlug: category.slug,
+            cityName: city.name,
+          },
           relatedEntityType: 'repair_request',
           relatedEntityId: request.id,
           email: {
@@ -343,8 +342,8 @@ export class RepairRequestsService implements IRepairRequestsService {
     await this.notificationsService.Notify({
       userId: customer.id,
       type: NotificationType.StatusChange,
-      title: 'Repair request status changed',
-      body: `Your repair request is now: ${request.status}`,
+      messageKey: 'repair_request_status_changed',
+      messageParams: { status: request.status },
       relatedEntityType: 'repair_request',
       relatedEntityId: request.id,
       email: {

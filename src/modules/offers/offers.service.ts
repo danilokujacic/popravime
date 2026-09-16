@@ -75,8 +75,8 @@ export class OffersService implements IOffersService {
     await this.notificationsService.Notify({
       userId: customer.id,
       type: NotificationType.NewOffer,
-      title: 'New offer received',
-      body: `${provider.businessName} sent an offer for your repair request`,
+      messageKey: 'new_offer',
+      messageParams: { providerName: provider.businessName },
       relatedEntityType: 'offer',
       relatedEntityId: offer.id,
       email: {
@@ -140,8 +140,7 @@ export class OffersService implements IOffersService {
     await this.notificationsService.Notify({
       userId: providerOwner.id,
       type: NotificationType.OfferAccepted,
-      title: 'Offer accepted',
-      body: `Your offer for repair request ${offer.requestId} was accepted`,
+      messageKey: 'offer_accepted',
       relatedEntityType: 'offer',
       relatedEntityId: offer.id,
       email: {
@@ -161,8 +160,8 @@ export class OffersService implements IOffersService {
     await this.notificationsService.Notify({
       userId: customer.id,
       type: NotificationType.OfferAcceptedConfirmation,
-      title: 'You accepted an offer',
-      body: `${provider.businessName} accepted — here's how to reach them`,
+      messageKey: 'offer_accepted_confirmation',
+      messageParams: { providerName: provider.businessName },
       relatedEntityType: 'offer',
       relatedEntityId: offer.id,
       email: {

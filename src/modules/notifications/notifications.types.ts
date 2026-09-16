@@ -13,11 +13,13 @@ export enum NotificationType {
   OfferAcceptedConfirmation = 'offer_accepted_confirmation',
 }
 
+export type NotificationMessageParams = Record<string, string | number>;
+
 export interface NotifyInput {
   userId: string;
   type: NotificationType;
-  title: string;
-  body: string;
+  messageKey: string;
+  messageParams?: NotificationMessageParams;
   relatedEntityType?: string;
   relatedEntityId?: string;
   email: EmailJobContent;

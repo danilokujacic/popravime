@@ -110,8 +110,8 @@ export class MessagesService implements IMessagesService {
     await this.notificationsService.Notify({
       userId: recipient.id,
       type: NotificationType.NewMessage,
-      title: 'New message',
-      body: `${sender.fullName} sent you a message`,
+      messageKey: 'new_message',
+      messageParams: { senderName: sender.fullName },
       relatedEntityType: 'message',
       relatedEntityId: message.id,
       email: {

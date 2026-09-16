@@ -28,8 +28,8 @@ export class NotificationsService implements INotificationsService {
     const notification = await this.notificationsRepository.Create({
       userId: input.userId,
       type: input.type,
-      title: input.title,
-      body: input.body,
+      messageKey: input.messageKey,
+      messageParams: input.messageParams ?? null,
       relatedEntityType: input.relatedEntityType ?? null,
       relatedEntityId: input.relatedEntityId ?? null,
     });
