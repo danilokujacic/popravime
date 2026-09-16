@@ -8,6 +8,7 @@ import { Notification } from './entities/notification.entity';
 import { NotifyInput } from './notifications.types';
 import { INotificationsService } from './notifications.service.interface';
 import { EmailQueueService } from '../infra/email/email-queue.service';
+import { EmailCooldownService } from '../infra/email/email-cooldown.service';
 import { EmailJob } from '../infra/email/email.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
@@ -19,6 +20,7 @@ export class NotificationsService implements INotificationsService {
   constructor(
     private readonly notificationsRepository: NotificationsRepository,
     private readonly emailQueueService: EmailQueueService,
+    private readonly emailCooldownService: EmailCooldownService,
     private readonly cls: ClsService,
     @InjectPinoLogger(NotificationsService.name)
     private readonly logger: PinoLogger,
@@ -34,12 +36,17 @@ export class NotificationsService implements INotificationsService {
       relatedEntityId: input.relatedEntityId ?? null,
     });
 
-    // Read now, not inside the deferred commit callback below — this always runs inside the
-    // request that called Notify, whereas the callback's own execution context is one more
+    // Read/checked now, not inside the deferred commit callback below — this always runs inside
+    // the request that called Notify, whereas the callback's own execution context is one more
     // hop removed from it.
     const correlationId =
       this.cls.get<string>(CORRELATION_ID_CLS_KEY) ?? randomUUID();
-    this.EnqueueEmailOnCommit({ ...input.email, correlationId });
+    const shouldSend = await this.emailCooldownService.ShouldSend(
+      input.userId,
+    );
+    if (shouldSend) {
+      this.EnqueueEmailOnCommit({ ...input.email, correlationId });
+    }
 
     this.logger.info(
       {

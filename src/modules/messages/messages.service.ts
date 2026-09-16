@@ -118,6 +118,7 @@ export class MessagesService implements IMessagesService {
         kind: 'new-message',
         payload: {
           to: recipient.email,
+          locale: recipient.locale,
           recipientName: recipient.fullName,
           senderName: sender.fullName,
         },

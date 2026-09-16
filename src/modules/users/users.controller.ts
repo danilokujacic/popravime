@@ -26,6 +26,7 @@ export class UsersController {
     const user = await this.usersService.Update(currentUser.id, {
       fullName: dto.fullName,
       phone: dto.phone,
+      locale: dto.locale,
     });
     return UserResponseMapper.ToDto(user);
   }

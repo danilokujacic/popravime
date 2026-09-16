@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { ClsService } from 'nestjs-cls';
 import { UsersService } from '../users/users.service';
+import { User } from '../users/entities/user.entity';
 import { EmailConfirmationsService } from '../email-confirmations/email-confirmations.service';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { jwtConfig } from '../../config/jwt.config';
@@ -62,7 +63,7 @@ export class AuthService implements IAuthService {
     const user = await this.usersService.Register(input);
     this.logger.info({ userId: user.id, role: user.role }, 'User registered');
 
-    await this.SendConfirmationEmail(user.email, user.fullName);
+    await this.SendConfirmationEmail(user);
 
     return { email: user.email };
   }
@@ -148,20 +149,22 @@ export class AuthService implements IAuthService {
       );
     }
 
-    await this.SendConfirmationEmail(user.email, user.fullName);
+    await this.SendConfirmationEmail(user);
     this.logger.info({ userId: user.id }, 'Confirmation email resent');
   }
 
-  private async SendConfirmationEmail(
-    email: string,
-    fullName: string,
-  ): Promise<void> {
-    const { slug } = await this.emailConfirmationsService.Create(email);
+  private async SendConfirmationEmail(user: User): Promise<void> {
+    const { slug } = await this.emailConfirmationsService.Create(user.email);
     const confirmUrl = `${this.app.frontendUrl}/confirm-email/${slug}`;
 
     await this.emailQueueService.Enqueue({
       kind: 'email-confirmation',
-      payload: { to: email, fullName, confirmUrl },
+      payload: {
+        to: user.email,
+        fullName: user.fullName,
+        locale: user.locale,
+        confirmUrl,
+      },
       correlationId: this.cls.get<string>(CORRELATION_ID_CLS_KEY) ?? randomUUID(),
     });
   }

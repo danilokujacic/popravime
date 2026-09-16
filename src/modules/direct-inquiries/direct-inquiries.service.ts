@@ -61,6 +61,7 @@ export class DirectInquiriesService implements IDirectInquiriesService {
         kind: 'new-inquiry',
         payload: {
           to: providerOwner.email,
+          locale: providerOwner.locale,
           providerName: provider.businessName,
           senderName,
         },

@@ -106,6 +106,20 @@ export class RepairRequestsRepository {
     return (result.affected ?? 0) > 0;
   }
 
+  async TryReopen(
+    id: string,
+    fromStatuses: RequestStatus[],
+  ): Promise<boolean> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(RepairRequest)
+      .set({ status: RequestStatus.Open, acceptedOfferId: null })
+      .where('id = :id', { id })
+      .andWhere('status IN (:...fromStatuses)', { fromStatuses })
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
   async Save(request: RepairRequest): Promise<RepairRequest> {
     try {
       return await this.repository.save(request);

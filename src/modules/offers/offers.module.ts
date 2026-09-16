@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Offer } from './entities/offer.entity';
 import { OffersRepository } from './offers.repository';
@@ -13,7 +13,9 @@ import { NotificationsModule } from '../notifications/notifications.module';
   imports: [
     TypeOrmModule.forFeature([Offer]),
     ProvidersModule,
-    RepairRequestsModule,
+    // RepairRequestsModule also imports OffersModule (Reopen() cancels the accepted offer) —
+    // forwardRef breaks the otherwise-circular module graph.
+    forwardRef(() => RepairRequestsModule),
     UsersModule,
     NotificationsModule,
   ],

@@ -1,11 +1,13 @@
 import { Expose } from 'class-transformer';
 import {
+  IsEnum,
   IsOptional,
   IsPhoneNumber,
   IsString,
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Locale } from '../users.types';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -18,4 +20,8 @@ export class UpdateUserDto {
   @IsOptional()
   @IsPhoneNumber()
   phone?: string;
+
+  @IsOptional()
+  @IsEnum(Locale)
+  locale?: Locale;
 }

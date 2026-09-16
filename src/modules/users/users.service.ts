@@ -109,6 +109,9 @@ export class UsersService implements IUsersService {
     if (input.phone !== undefined) {
       user.phone = input.phone;
     }
+    if (input.locale !== undefined) {
+      user.locale = input.locale;
+    }
 
     return this.usersRepository.Save(user);
   }

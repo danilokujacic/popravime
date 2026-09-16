@@ -236,6 +236,7 @@ export class RepairRequestsService implements IRepairRequestsService {
         kind: 'status-change',
         payload: {
           to: customer.email,
+          locale: customer.locale,
           customerName: customer.fullName,
           status: request.status,
           requestId: request.id,
@@ -246,10 +247,9 @@ export class RepairRequestsService implements IRepairRequestsService {
 
   // Only reachable once a request is Open — pending_review/rejected requests aren't viewable by
   // providers yet (EnsureViewable throws REPAIR_REQUEST_NOT_MODERATED), so notifying them any
-  // earlier would hand out a preview link that 403s.
-  private async NotifyProvidersOfNewRequest(
-    request: RepairRequest,
-  ): Promise<void> {
+  // earlier would hand out a preview link that 403s. Public: also called from Reopen(), which
+  // fans this same "new request" email back out to every eligible provider.
+  async NotifyProvidersOfNewRequest(request: RepairRequest): Promise<void> {
     const [category, city, providers] = await Promise.all([
       this.categoriesService.FindById(request.categoryId),
       this.citiesService.FindById(request.cityId),
@@ -274,6 +274,7 @@ export class RepairRequestsService implements IRepairRequestsService {
             kind: 'new-repair-request',
             payload: {
               to: provider.ownerUser.email,
+              locale: provider.ownerUser.locale,
               providerName: provider.ownerUser.fullName,
               categoryName: category.name,
               cityName: city.name,
@@ -317,6 +318,8 @@ export class RepairRequestsService implements IRepairRequestsService {
     customerId: string,
     status: RequestStatus,
   ): Promise<RepairRequest> {
+    this.EnsureNotWorkflowManagedStatus(id, status);
+
     const request = await this.FindById(id);
     this.EnsureOwnership(request, customerId);
     this.EnsureTransition(id, request.status, status);
@@ -350,6 +353,7 @@ export class RepairRequestsService implements IRepairRequestsService {
         kind: 'status-change',
         payload: {
           to: customer.email,
+          locale: customer.locale,
           customerName: customer.fullName,
           status: request.status,
           requestId: request.id,
@@ -410,6 +414,71 @@ export class RepairRequestsService implements IRepairRequestsService {
     return request;
   }
 
+  // Reopen is the mirror of AcceptOffer: same conditional-update race guard, but going back the
+  // other way. It only flips the request itself — cancelling the previously accepted offer is
+  // OffersService.Reopen's job (it already depends on this service, so it orchestrates both
+  // sides atomically in one transaction rather than this service reaching into OffersModule).
+  @Transactional()
+  async Reopen(id: string, customerId: string): Promise<RepairRequest> {
+    const request = await this.FindById(id);
+    this.EnsureOwnership(request, customerId);
+    this.EnsureTransition(id, request.status, RequestStatus.Open);
+
+    if (!request.acceptedOfferId) {
+      this.logger.warn(
+        { requestId: id, customerId },
+        'Reopen rejected: request has no accepted offer to walk back',
+      );
+      throw new DomainConflictException(
+        'REPAIR_REQUEST_NOT_ACCEPTED',
+        'This repair request has no accepted offer to reopen from',
+      );
+    }
+
+    const reopened = await this.repairRequestsRepository.TryReopen(id, [
+      RequestStatus.Accepted,
+      RequestStatus.InProgress,
+    ]);
+    if (!reopened) {
+      this.logger.warn(
+        { requestId: id, customerId },
+        'Reopen lost the race to another status change',
+      );
+      throw new DomainConflictException(
+        'REPAIR_REQUEST_REOPEN_RACE_LOST',
+        'This repair request changed status before it could be reopened',
+      );
+    }
+
+    request.status = RequestStatus.Open;
+    request.acceptedOfferId = null;
+
+    const customer = await this.usersService.FindById(customerId);
+    await this.notificationsService.Notify({
+      userId: customer.id,
+      type: NotificationType.RequestReopened,
+      messageKey: 'repair_request_reopened',
+      relatedEntityType: 'repair_request',
+      relatedEntityId: request.id,
+      email: {
+        kind: 'status-change',
+        payload: {
+          to: customer.email,
+          locale: customer.locale,
+          customerName: customer.fullName,
+          status: RequestStatus.Open,
+          requestId: request.id,
+        },
+      },
+    });
+
+    await this.NotifyProvidersOfNewRequest(request);
+
+    this.logger.info({ requestId: id, customerId }, 'Repair request reopened');
+
+    return request;
+  }
+
   private EnsureOwnership(request: RepairRequest, customerId: string): void {
     if (request.customerId !== customerId) {
       this.logger.warn(
@@ -419,6 +488,35 @@ export class RepairRequestsService implements IRepairRequestsService {
       throw new DomainForbiddenException(
         'REPAIR_REQUEST_NOT_OWNED',
         'You do not own this repair request',
+      );
+    }
+  }
+
+  // Accepted and Open both carry side effects (linking/unlinking an offer, auto-rejecting other
+  // offers, re-notifying eligible providers) that only AcceptOffer/Reopen perform correctly — this
+  // generic status endpoint must not be able to reach either directly.
+  private EnsureNotWorkflowManagedStatus(
+    id: string,
+    status: RequestStatus,
+  ): void {
+    if (status === RequestStatus.Accepted) {
+      this.logger.warn(
+        { requestId: id },
+        'Repair request status change rejected: accept must go through an offer',
+      );
+      throw new DomainConflictException(
+        'ACCEPT_REQUIRES_OFFER',
+        'Accept an offer via PATCH /offers/:id/status instead of setting the request status directly',
+      );
+    }
+    if (status === RequestStatus.Open) {
+      this.logger.warn(
+        { requestId: id },
+        'Repair request status change rejected: reopening must go through the reopen endpoint',
+      );
+      throw new DomainConflictException(
+        'REOPEN_REQUIRES_DEDICATED_ENDPOINT',
+        'Reopen a request via POST /repair-requests/:id/reopen instead of setting the request status directly',
       );
     }
   }

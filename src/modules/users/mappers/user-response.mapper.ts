@@ -9,6 +9,7 @@ export class UserResponseMapper {
     dto.fullName = user.fullName;
     dto.phone = user.phone;
     dto.role = user.role;
+    dto.locale = user.locale;
     dto.createdAt = user.createdAt;
     return dto;
   }

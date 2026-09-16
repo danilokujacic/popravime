@@ -77,6 +77,20 @@ export const EnvValidationSchema = Joi.object({
   // enqueues an actual email send, not just a credential check.
   THROTTLE_RESEND_CONFIRMATION_LIMIT: Joi.number().default(1),
   THROTTLE_RESEND_CONFIRMATION_TTL_MS: Joi.number().default(60000),
+  THROTTLE_OFFER_CREATE_LIMIT: Joi.number().default(5),
+  THROTTLE_OFFER_CREATE_TTL_MS: Joi.number().default(60000),
+  THROTTLE_OFFER_STATUS_LIMIT: Joi.number().default(10),
+  THROTTLE_OFFER_STATUS_TTL_MS: Joi.number().default(60000),
+  THROTTLE_DIRECT_INQUIRY_LIMIT: Joi.number().default(5),
+  THROTTLE_DIRECT_INQUIRY_TTL_MS: Joi.number().default(60000),
+  THROTTLE_REPAIR_REQUEST_CREATE_LIMIT: Joi.number().default(5),
+  THROTTLE_REPAIR_REQUEST_CREATE_TTL_MS: Joi.number().default(60000),
+  THROTTLE_MESSAGE_LIMIT: Joi.number().default(20),
+  THROTTLE_MESSAGE_TTL_MS: Joi.number().default(60000),
+  // Per-recipient cap on transactional emails regardless of which IP/account triggered them —
+  // guards against a flood spread across many accounts/IPs that per-endpoint throttling can't see.
+  THROTTLE_EMAIL_RECIPIENT_LIMIT: Joi.number().default(20),
+  THROTTLE_EMAIL_RECIPIENT_TTL_MS: Joi.number().default(3600000),
 
   GEOCODING_USER_AGENT: Joi.string().required(),
 

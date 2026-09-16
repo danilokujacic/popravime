@@ -40,3 +40,41 @@ export const GEOCODING_THROTTLE = {
     ttl: Number(process.env.THROTTLE_GEOCODING_TTL_MS ?? 60000),
   },
 };
+
+// Every one of these enqueues an actual email send (to a customer, a provider, or a whole batch
+// of eligible providers), so — like RESEND_CONFIRMATION_THROTTLE — they need a tighter budget
+// than plain read/browse traffic to keep a scripted client from cheaply spamming inboxes.
+export const OFFER_CREATE_THROTTLE = {
+  default: {
+    limit: Number(process.env.THROTTLE_OFFER_CREATE_LIMIT ?? 5),
+    ttl: Number(process.env.THROTTLE_OFFER_CREATE_TTL_MS ?? 60000),
+  },
+};
+
+export const OFFER_STATUS_THROTTLE = {
+  default: {
+    limit: Number(process.env.THROTTLE_OFFER_STATUS_LIMIT ?? 10),
+    ttl: Number(process.env.THROTTLE_OFFER_STATUS_TTL_MS ?? 60000),
+  },
+};
+
+export const DIRECT_INQUIRY_THROTTLE = {
+  default: {
+    limit: Number(process.env.THROTTLE_DIRECT_INQUIRY_LIMIT ?? 5),
+    ttl: Number(process.env.THROTTLE_DIRECT_INQUIRY_TTL_MS ?? 60000),
+  },
+};
+
+export const REPAIR_REQUEST_CREATE_THROTTLE = {
+  default: {
+    limit: Number(process.env.THROTTLE_REPAIR_REQUEST_CREATE_LIMIT ?? 5),
+    ttl: Number(process.env.THROTTLE_REPAIR_REQUEST_CREATE_TTL_MS ?? 60000),
+  },
+};
+
+export const MESSAGE_THROTTLE = {
+  default: {
+    limit: Number(process.env.THROTTLE_MESSAGE_LIMIT ?? 20),
+    ttl: Number(process.env.THROTTLE_MESSAGE_TTL_MS ?? 60000),
+  },
+};

@@ -11,6 +11,8 @@ export enum NotificationType {
   NewInquiry = 'new_inquiry',
   NewRepairRequest = 'new_repair_request',
   OfferAcceptedConfirmation = 'offer_accepted_confirmation',
+  OfferCancelled = 'offer_cancelled',
+  RequestReopened = 'request_reopened',
 }
 
 export type NotificationMessageParams = Record<string, string | number>;

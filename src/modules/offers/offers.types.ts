@@ -9,6 +9,7 @@ export enum OfferStatus {
   Accepted = 'accepted',
   Rejected = 'rejected',
   Withdrawn = 'withdrawn',
+  Cancelled = 'cancelled',
 }
 
 export interface CreateOfferInput {

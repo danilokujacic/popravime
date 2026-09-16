@@ -12,8 +12,10 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { IMAGE_UPLOAD_OPTIONS } from '../../common/upload/upload-limits.constants';
 import { RepairRequestsService } from './repair-requests.service';
+import { OffersService } from '../offers/offers.service';
 import { ProvidersService } from '../providers/providers.service';
 import { CreateRepairRequestDto } from './dto/create-repair-request.dto';
 import { UpdateRepairRequestStatusDto } from './dto/update-repair-request-status.dto';
@@ -31,6 +33,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { UserRole } from '../users/users.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+import { REPAIR_REQUEST_CREATE_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
 
 const MAX_PHOTOS = 5;
 
@@ -43,6 +46,7 @@ const UNMODERATED_STATUSES: RequestStatus[] = [
 export class RepairRequestsController {
   constructor(
     private readonly repairRequestsService: RepairRequestsService,
+    private readonly offersService: OffersService,
     private readonly providersService: ProvidersService,
   ) {}
 
@@ -81,6 +85,7 @@ export class RepairRequestsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.Customer)
   @UseInterceptors(FilesInterceptor('photos', MAX_PHOTOS, IMAGE_UPLOAD_OPTIONS))
+  @Throttle(REPAIR_REQUEST_CREATE_THROTTLE)
   @Post()
   async Create(
     @CurrentUser() user: AuthenticatedUser,
@@ -117,6 +122,18 @@ export class RepairRequestsController {
       user.id,
       dto.status,
     );
+    return RepairRequestResponseMapper.ToDto(request);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Customer)
+  @Throttle(REPAIR_REQUEST_CREATE_THROTTLE)
+  @Post(':id/reopen')
+  async Reopen(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<RepairRequestResponseDto> {
+    const request = await this.offersService.Reopen(id, user.id);
     return RepairRequestResponseMapper.ToDto(request);
   }
 

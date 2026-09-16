@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { DirectInquiriesService } from './direct-inquiries.service';
 import { CreateDirectInquiryDto } from './dto/create-direct-inquiry.dto';
 import { UpdateInquiryStatusDto } from './dto/update-inquiry-status.dto';
@@ -24,6 +25,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { UserRole } from '../users/users.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+import { DIRECT_INQUIRY_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
 
 @Controller('direct-inquiries')
 export class DirectInquiriesController {
@@ -33,6 +35,7 @@ export class DirectInquiriesController {
 
   @Public()
   @UseGuards(OptionalAuthGuard)
+  @Throttle(DIRECT_INQUIRY_THROTTLE)
   @Post()
   async Create(
     @OptionalUser() user: AuthenticatedUser | undefined,

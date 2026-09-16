@@ -170,7 +170,11 @@ export class VerificationRequestsService implements IVerificationRequestsService
         messageKey: 'verification_approved',
         email: {
           kind: 'verification-approved',
-          payload: { to: providerOwner.email, providerName },
+          payload: {
+            to: providerOwner.email,
+            locale: providerOwner.locale,
+            providerName,
+          },
         },
       });
       return;
@@ -182,7 +186,12 @@ export class VerificationRequestsService implements IVerificationRequestsService
       messageKey: 'verification_rejected',
       email: {
         kind: 'verification-rejected',
-        payload: { to: providerOwner.email, providerName, reviewNotes },
+        payload: {
+          to: providerOwner.email,
+          locale: providerOwner.locale,
+          providerName,
+          reviewNotes,
+        },
       },
     });
   }

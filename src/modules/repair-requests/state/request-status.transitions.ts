@@ -7,10 +7,15 @@ const ALLOWED_TRANSITIONS: Record<RequestStatus, RequestStatus[]> = {
     RequestStatus.Accepted,
     RequestStatus.Cancelled,
   ],
-  [RequestStatus.Accepted]: [RequestStatus.InProgress, RequestStatus.Cancelled],
+  [RequestStatus.Accepted]: [
+    RequestStatus.InProgress,
+    RequestStatus.Cancelled,
+    RequestStatus.Open,
+  ],
   [RequestStatus.InProgress]: [
     RequestStatus.Completed,
     RequestStatus.Cancelled,
+    RequestStatus.Open,
   ],
   [RequestStatus.Completed]: [],
   [RequestStatus.Cancelled]: [],

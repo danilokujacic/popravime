@@ -6,9 +6,10 @@ const ALLOWED_TRANSITIONS: Record<OfferStatus, OfferStatus[]> = {
     OfferStatus.Rejected,
     OfferStatus.Withdrawn,
   ],
-  [OfferStatus.Accepted]: [],
+  [OfferStatus.Accepted]: [OfferStatus.Cancelled],
   [OfferStatus.Rejected]: [],
   [OfferStatus.Withdrawn]: [],
+  [OfferStatus.Cancelled]: [],
 };
 
 export class OfferStatusTransitions {

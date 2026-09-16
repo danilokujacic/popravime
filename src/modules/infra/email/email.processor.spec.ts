@@ -3,6 +3,7 @@ import type { PinoLogger } from 'nestjs-pino';
 import { EmailProcessor } from './email.processor';
 import type { EmailService } from './email.service.interface';
 import { EmailJob } from './email.types';
+import { Locale } from '../../users/users.types';
 
 function BuildJob(
   overrides?: Partial<EmailJob>,
@@ -11,7 +12,11 @@ function BuildJob(
   return {
     data: {
       kind: 'welcome',
-      payload: { to: 'user@popravime.me', fullName: 'Test User' },
+      payload: {
+        to: 'user@popravime.me',
+        locale: Locale.En,
+        fullName: 'Test User',
+      },
       correlationId: 'correlation-1',
       ...overrides,
     },

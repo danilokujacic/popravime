@@ -233,6 +233,128 @@ describe('OffersService.Accept', () => {
   });
 });
 
+describe('OffersService.Reopen', () => {
+  function BuildService(overrides?: {
+    offer?: ReturnType<typeof BuildOffer>;
+    request?: { id: string; acceptedOfferId: string | null };
+    reopenMock?: jest.Mock;
+  }) {
+    const offer = overrides?.offer ?? BuildOffer({ status: OfferStatus.Accepted });
+    const request = overrides?.request ?? {
+      id: 'request-1',
+      acceptedOfferId: 'offer-1',
+    };
+
+    const offersRepository = {
+      FindById: jest.fn().mockResolvedValue(offer),
+      Save: jest.fn().mockImplementation((value) => Promise.resolve(value)),
+    } as unknown as OffersRepository;
+
+    const providersService = {
+      FindById: jest.fn().mockResolvedValue(BuildProvider()),
+    } as unknown as ProvidersService;
+
+    const repairRequestsService = {
+      FindById: jest.fn().mockResolvedValue(request),
+      Reopen:
+        overrides?.reopenMock ??
+        jest.fn().mockResolvedValue({ ...request, status: 'open' }),
+    } as unknown as RepairRequestsService;
+
+    const users = new Map<string, User>([
+      [
+        'provider-owner-1',
+        BuildUser('provider-owner-1', 'owner@popravime.me', 'Provider Owner'),
+      ],
+    ]);
+    const usersService = {
+      FindById: jest
+        .fn()
+        .mockImplementation((id: string) => Promise.resolve(users.get(id))),
+    } as unknown as UsersService;
+
+    const notificationsService = {
+      Notify: jest.fn().mockResolvedValue(undefined),
+    } as unknown as NotificationsService;
+
+    const app = {
+      frontendUrl: 'http://localhost:3000',
+    } as unknown as ConstructorParameters<typeof OffersService>[6];
+
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof OffersService>[7];
+
+    const service = new OffersService(
+      offersRepository,
+      providersService,
+      repairRequestsService,
+      usersService,
+      notificationsService,
+      { required: true },
+      app,
+      logger,
+    );
+
+    return {
+      service,
+      offersRepository,
+      repairRequestsService,
+      notificationsService,
+      logger,
+    };
+  }
+
+  it('reopens the request and cancels the previously accepted offer', async () => {
+    const { service, offersRepository, repairRequestsService, notificationsService } =
+      BuildService();
+
+    const result = await service.Reopen('request-1', 'customer-1');
+
+    expect(repairRequestsService.Reopen).toHaveBeenCalledWith(
+      'request-1',
+      'customer-1',
+    );
+    expect(offersRepository.Save).toHaveBeenCalledWith(
+      expect.objectContaining({ status: OfferStatus.Cancelled }),
+    );
+    expect(notificationsService.Notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'provider-owner-1',
+        type: 'offer_cancelled',
+        email: expect.objectContaining({ kind: 'offer-cancelled' }),
+      }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({ id: 'request-1', status: 'open' }),
+    );
+  });
+
+  it('rejects reopening a request with no accepted offer', async () => {
+    const { service, offersRepository, repairRequestsService } = BuildService({
+      request: { id: 'request-1', acceptedOfferId: null },
+    });
+
+    await expect(
+      service.Reopen('request-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(repairRequestsService.Reopen).not.toHaveBeenCalled();
+    expect(offersRepository.Save).not.toHaveBeenCalled();
+  });
+
+  it('rejects reopening when the accepted offer is somehow not in an accepted state', async () => {
+    const { service, repairRequestsService } = BuildService({
+      offer: BuildOffer({ status: OfferStatus.Withdrawn }),
+    });
+
+    await expect(
+      service.Reopen('request-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(repairRequestsService.Reopen).not.toHaveBeenCalled();
+  });
+});
+
 function BuildRequest(overrides?: Partial<RepairRequest>): RepairRequest {
   return {
     id: 'request-1',

@@ -6,7 +6,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { OAuthProvider, UserRole } from '../users.types';
+import { Locale, OAuthProvider, UserRole } from '../users.types';
 
 @Index(['oauthProvider', 'oauthId'], { unique: true })
 @Entity('users')
@@ -51,6 +51,16 @@ export class User {
   // that email), a plain registration starts false and flips true via EmailConfirmationsService.
   @Column({ name: 'email_verified', type: 'boolean', default: false })
   emailVerified: boolean;
+
+  // Used to pick which language transactional emails render in — see EmailModule's shared
+  // layout/translations. Defaults to Montenegrin; the frontend lets a user switch it.
+  @Column({
+    type: 'enum',
+    enum: Locale,
+    enumName: 'user_locale_enum',
+    default: Locale.Me,
+  })
+  locale: Locale;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

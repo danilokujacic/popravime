@@ -2,8 +2,10 @@ import type { ClsService } from 'nestjs-cls';
 import { NotificationsService } from './notifications.service';
 import { NotificationsRepository } from './notifications.repository';
 import { EmailQueueService } from '../infra/email/email-queue.service';
+import { EmailCooldownService } from '../infra/email/email-cooldown.service';
 import { Notification } from './entities/notification.entity';
 import { NotificationType, NotifyInput } from './notifications.types';
+import { Locale } from '../users/users.types';
 
 const CORRELATION_ID = 'correlation-1';
 
@@ -15,7 +17,11 @@ function BuildInput(overrides?: Partial<NotifyInput>): NotifyInput {
     messageParams: { providerName: 'Test Provider' },
     email: {
       kind: 'welcome',
-      payload: { to: 'user@popravime.me', fullName: 'Test User' },
+      payload: {
+        to: 'user@popravime.me',
+        locale: Locale.En,
+        fullName: 'Test User',
+      },
     },
     ...overrides,
   };
@@ -47,6 +53,10 @@ describe('NotificationsService.Notify (outside a transactional context)', () => 
       Enqueue: jest.fn().mockResolvedValue(undefined),
     } as unknown as EmailQueueService;
 
+    const emailCooldownService = {
+      ShouldSend: jest.fn().mockResolvedValue(true),
+    } as unknown as EmailCooldownService;
+
     const cls = {
       get: jest.fn().mockReturnValue(CORRELATION_ID),
     } as unknown as ClsService;
@@ -54,16 +64,24 @@ describe('NotificationsService.Notify (outside a transactional context)', () => 
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof NotificationsService>[3];
+    } as unknown as ConstructorParameters<typeof NotificationsService>[4];
 
     const service = new NotificationsService(
       notificationsRepository,
       emailQueueService,
+      emailCooldownService,
       cls,
       logger,
     );
 
-    return { service, notificationsRepository, emailQueueService, cls, logger };
+    return {
+      service,
+      notificationsRepository,
+      emailQueueService,
+      emailCooldownService,
+      cls,
+      logger,
+    };
   }
 
   it('persists the notification and enqueues the email immediately as a fallback', async () => {
@@ -97,6 +115,21 @@ describe('NotificationsService.Notify (outside a transactional context)', () => 
 
     await expect(service.Notify(BuildInput())).rejects.toThrow(failure);
 
+    expect(emailQueueService.Enqueue).not.toHaveBeenCalled();
+  });
+
+  it('persists the notification but skips the email once the recipient cooldown trips', async () => {
+    const input = BuildInput();
+    const notification = BuildNotification(input);
+    const { service, notificationsRepository, emailQueueService, emailCooldownService } =
+      BuildService(notification);
+    (emailCooldownService.ShouldSend as jest.Mock).mockResolvedValue(false);
+
+    const result = await service.Notify(input);
+
+    expect(result.id).toBe('notification-1');
+    expect(notificationsRepository.Create).toHaveBeenCalled();
+    expect(emailCooldownService.ShouldSend).toHaveBeenCalledWith('user-1');
     expect(emailQueueService.Enqueue).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,5 @@
+import { Locale } from '../../users/users.types';
+
 export interface SendEmailInput {
   to: string;
   subject: string;
@@ -10,27 +12,30 @@ export interface SendEmailResult {
   messageId: string | null;
 }
 
-export interface WelcomeJobPayload {
+// Every job payload carries the recipient's locale — templates render fully localized subject
+// and HTML from it rather than always defaulting to English.
+export interface BaseJobPayload {
   to: string;
+  locale: Locale;
+}
+
+export interface WelcomeJobPayload extends BaseJobPayload {
   fullName: string;
 }
 
-export interface EmailConfirmationJobPayload {
-  to: string;
+export interface EmailConfirmationJobPayload extends BaseJobPayload {
   fullName: string;
   // Full URL, built once when the job is enqueued — see AuthService.
   confirmUrl: string;
 }
 
-export interface OfferReceivedJobPayload {
-  to: string;
+export interface OfferReceivedJobPayload extends BaseJobPayload {
   customerName: string;
   providerName: string;
   requestId: string;
 }
 
-export interface OfferAcceptedJobPayload {
-  to: string;
+export interface OfferAcceptedJobPayload extends BaseJobPayload {
   providerName: string;
   requestId: string;
   // Contact info matters more than the in-app chat here — put it straight in the email rather
@@ -41,8 +46,7 @@ export interface OfferAcceptedJobPayload {
   previewUrl: string;
 }
 
-export interface OfferAcceptedCustomerJobPayload {
-  to: string;
+export interface OfferAcceptedCustomerJobPayload extends BaseJobPayload {
   customerName: string;
   providerName: string;
   providerEmail: string | null;
@@ -51,51 +55,49 @@ export interface OfferAcceptedCustomerJobPayload {
   previewUrl: string;
 }
 
-export interface StatusChangeJobPayload {
-  to: string;
+export interface StatusChangeJobPayload extends BaseJobPayload {
   customerName: string;
   status: string;
   requestId: string;
 }
 
-export interface ReviewCreatedJobPayload {
-  to: string;
+export interface ReviewCreatedJobPayload extends BaseJobPayload {
   providerName: string;
   rating: number;
   requestId: string;
 }
 
-export interface VerificationApprovedJobPayload {
-  to: string;
+export interface VerificationApprovedJobPayload extends BaseJobPayload {
   providerName: string;
 }
 
-export interface VerificationRejectedJobPayload {
-  to: string;
+export interface VerificationRejectedJobPayload extends BaseJobPayload {
   providerName: string;
   reviewNotes: string | null;
 }
 
-export interface NewMessageJobPayload {
-  to: string;
+export interface NewMessageJobPayload extends BaseJobPayload {
   recipientName: string;
   senderName: string;
 }
 
-export interface NewInquiryJobPayload {
-  to: string;
+export interface NewInquiryJobPayload extends BaseJobPayload {
   providerName: string;
   senderName: string;
 }
 
-export interface NewRepairRequestJobPayload {
-  to: string;
+export interface NewRepairRequestJobPayload extends BaseJobPayload {
   providerName: string;
   categoryName: string;
   cityName: string;
   // Full URL, built once when the job is enqueued (config isn't available down in
   // email.processor.ts's pure template functions) — see RepairRequestsService.
   previewUrl: string;
+}
+
+export interface OfferCancelledJobPayload extends BaseJobPayload {
+  providerName: string;
+  requestId: string;
 }
 
 // What an email job renders — the kind/payload pair. Callers that never touch the queue
@@ -116,7 +118,8 @@ export type EmailJobContent =
   | { kind: 'verification-rejected'; payload: VerificationRejectedJobPayload }
   | { kind: 'new-message'; payload: NewMessageJobPayload }
   | { kind: 'new-inquiry'; payload: NewInquiryJobPayload }
-  | { kind: 'new-repair-request'; payload: NewRepairRequestJobPayload };
+  | { kind: 'new-repair-request'; payload: NewRepairRequestJobPayload }
+  | { kind: 'offer-cancelled'; payload: OfferCancelledJobPayload };
 
 // Queue/job metadata, not email content — kept separate from EmailJobContent so the many
 // call sites that only ever describe *what* to send (they go through

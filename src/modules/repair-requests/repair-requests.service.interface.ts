@@ -30,6 +30,8 @@ export interface IRepairRequestsService {
     offerId: string,
     customerId: string,
   ): Promise<RepairRequest>;
+  Reopen(id: string, customerId: string): Promise<RepairRequest>;
+  NotifyProvidersOfNewRequest(request: RepairRequest): Promise<void>;
   Approve(
     id: string,
     adminId: string,

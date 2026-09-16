@@ -1,4 +1,4 @@
-import { UserRole } from '../users.types';
+import { Locale, UserRole } from '../users.types';
 
 export class UserResponseDto {
   id: string;
@@ -6,5 +6,6 @@ export class UserResponseDto {
   fullName: string;
   phone: string | null;
   role: UserRole;
+  locale: Locale;
   createdAt: Date;
 }

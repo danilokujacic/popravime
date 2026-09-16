@@ -20,6 +20,7 @@ import { BuildVerificationRejectedEmail } from './templates/verification-rejecte
 import { BuildNewMessageEmail } from './templates/new-message.template';
 import { BuildNewInquiryEmail } from './templates/new-inquiry.template';
 import { BuildNewRepairRequestEmail } from './templates/new-repair-request.template';
+import { BuildOfferCancelledEmail } from './templates/offer-cancelled.template';
 
 interface EmailContent {
   to: string;
@@ -68,6 +69,8 @@ function BuildContent(job: EmailJob): EmailContent {
         to: job.payload.to,
         ...BuildNewRepairRequestEmail(job.payload),
       };
+    case 'offer-cancelled':
+      return { to: job.payload.to, ...BuildOfferCancelledEmail(job.payload) };
   }
 }
 

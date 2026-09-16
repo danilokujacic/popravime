@@ -11,6 +11,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { DOCUMENT_UPLOAD_OPTIONS } from '../../common/upload/upload-limits.constants';
 import { MessagesService } from './messages.service';
 import { CreateMessageDto } from './dto/create-message.dto';
@@ -19,6 +20,7 @@ import { MessageResponseDto } from './dto/message-response.dto';
 import { MessageResponseMapper } from './mappers/message-response.mapper';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
+import { MESSAGE_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
 
 @Controller('messages')
 export class MessagesController {
@@ -37,6 +39,7 @@ export class MessagesController {
   }
 
   @UseInterceptors(FileInterceptor('attachment', DOCUMENT_UPLOAD_OPTIONS))
+  @Throttle(MESSAGE_THROTTLE)
   @Post()
   async Create(
     @CurrentUser() user: AuthenticatedUser,

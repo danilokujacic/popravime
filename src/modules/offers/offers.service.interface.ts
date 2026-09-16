@@ -3,12 +3,14 @@ import { CreateOfferInput, ListOffersFilter } from './offers.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { CustomerContactDto } from './dto/customer-contact.dto';
+import { RepairRequest } from '../repair-requests/entities/repair-request.entity';
 
 export interface IOffersService {
   Create(providerOwnerId: string, input: CreateOfferInput): Promise<Offer>;
   Accept(offerId: string, customerId: string): Promise<Offer>;
   Reject(offerId: string, customerId: string): Promise<Offer>;
   Withdraw(offerId: string, providerOwnerId: string): Promise<Offer>;
+  Reopen(requestId: string, customerId: string): Promise<RepairRequest>;
   FindById(id: string): Promise<Offer>;
   List(
     filter: ListOffersFilter,

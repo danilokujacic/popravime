@@ -9,6 +9,11 @@ export enum OAuthProvider {
   Facebook = 'facebook',
 }
 
+export enum Locale {
+  Me = 'me',
+  En = 'en',
+}
+
 export interface CreateUserInput {
   email: string;
   password: string;
@@ -20,6 +25,7 @@ export interface CreateUserInput {
 export interface UpdateUserInput {
   fullName?: string;
   phone?: string;
+  locale?: Locale;
 }
 
 export interface UserCredentials {

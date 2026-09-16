@@ -41,6 +41,7 @@ function BuildService(request: RepairRequest) {
     Create: jest.fn().mockResolvedValue(request),
     Save: jest.fn().mockImplementation((entity: RepairRequest) => entity),
     TryAccept: jest.fn().mockResolvedValue(true),
+    TryReopen: jest.fn().mockResolvedValue(true),
   } as unknown as RepairRequestsRepository;
 
   const storageService = { Upload: jest.fn() } as unknown as StorageService;
@@ -343,6 +344,41 @@ describe('RepairRequestsService.Approve / Reject', () => {
   });
 });
 
+describe('RepairRequestsService.UpdateStatus', () => {
+  it('rejects a direct transition to accepted regardless of current status', async () => {
+    const request = BuildRequest({ status: RequestStatus.OffersReceived });
+    const { service, repairRequestsRepository } = BuildService(request);
+
+    await expect(
+      service.UpdateStatus('request-1', 'customer-1', RequestStatus.Accepted),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(repairRequestsRepository.Save).not.toHaveBeenCalled();
+  });
+
+  it('rejects a direct transition to open (reopening needs the dedicated endpoint)', async () => {
+    const request = BuildRequest({ status: RequestStatus.Accepted });
+    const { service, repairRequestsRepository } = BuildService(request);
+
+    await expect(
+      service.UpdateStatus('request-1', 'customer-1', RequestStatus.Open),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(repairRequestsRepository.Save).not.toHaveBeenCalled();
+  });
+
+  it('allows a legitimate direct transition like cancelling', async () => {
+    const request = BuildRequest({ status: RequestStatus.Open });
+    const { service } = BuildService(request);
+
+    const result = await service.UpdateStatus(
+      'request-1',
+      'customer-1',
+      RequestStatus.Cancelled,
+    );
+
+    expect(result.status).toBe(RequestStatus.Cancelled);
+  });
+});
+
 describe('RepairRequestsService.AcceptOffer', () => {
   it('accepts the offer via an atomic conditional transition', async () => {
     const request = BuildRequest({ status: RequestStatus.OffersReceived });
@@ -394,5 +430,124 @@ describe('RepairRequestsService.AcceptOffer', () => {
       }),
       expect.any(String),
     );
+  });
+});
+
+describe('RepairRequestsService.Reopen', () => {
+  it('reopens an accepted request via an atomic conditional transition', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.Accepted,
+      acceptedOfferId: 'offer-1',
+    });
+    const { service, repairRequestsRepository, notificationsService } =
+      BuildService(request);
+
+    const result = await service.Reopen('request-1', 'customer-1');
+
+    expect(result.status).toBe(RequestStatus.Open);
+    expect(result.acceptedOfferId).toBeNull();
+    expect(repairRequestsRepository.TryReopen).toHaveBeenCalledWith(
+      'request-1',
+      [RequestStatus.Accepted, RequestStatus.InProgress],
+    );
+    expect(notificationsService.Notify).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'request_reopened' }),
+    );
+  });
+
+  it('reopens an in-progress request too', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.InProgress,
+      acceptedOfferId: 'offer-1',
+    });
+    const { service } = BuildService(request);
+
+    const result = await service.Reopen('request-1', 'customer-1');
+
+    expect(result.status).toBe(RequestStatus.Open);
+  });
+
+  it('re-notifies eligible providers on reopen, same as a fresh moderation approval', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.Accepted,
+      acceptedOfferId: 'offer-1',
+      categoryId: 'category-1',
+      cityId: 'city-1',
+    });
+    const { service, notificationsService, providersService } =
+      BuildService(request);
+    (providersService.ListEligibleForCategory as jest.Mock).mockResolvedValue([
+      {
+        ownerUserId: 'owner-1',
+        businessName: 'Servis A',
+        ownerUser: { id: 'owner-1', email: 'a@example.com', fullName: 'A' },
+      },
+    ]);
+
+    await service.Reopen('request-1', 'customer-1');
+
+    // One call for the customer's reopen confirmation, one for the eligible provider.
+    expect(notificationsService.Notify).toHaveBeenCalledTimes(2);
+    expect(notificationsService.Notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'owner-1',
+        type: 'new_repair_request',
+      }),
+    );
+  });
+
+  it('rejects reopening a request with no accepted offer', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.Accepted,
+      acceptedOfferId: null,
+    });
+    const { service, repairRequestsRepository } = BuildService(request);
+
+    await expect(
+      service.Reopen('request-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(repairRequestsRepository.TryReopen).not.toHaveBeenCalled();
+  });
+
+  it('throws a conflict without notifying when reopen loses the race', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.Accepted,
+      acceptedOfferId: 'offer-1',
+    });
+    const { service, repairRequestsRepository, notificationsService } =
+      BuildService(request);
+    (repairRequestsRepository.TryReopen as jest.Mock).mockResolvedValue(false);
+
+    await expect(
+      service.Reopen('request-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(notificationsService.Notify).not.toHaveBeenCalled();
+  });
+
+  it('rejects a customer who does not own the request', async () => {
+    const request = BuildRequest({
+      customerId: 'someone-else',
+      status: RequestStatus.Accepted,
+      acceptedOfferId: 'offer-1',
+    });
+    const { service, repairRequestsRepository } = BuildService(request);
+
+    await expect(
+      service.Reopen('request-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+    expect(repairRequestsRepository.TryReopen).not.toHaveBeenCalled();
+  });
+
+  it('rejects reopening a request that is not accepted or in progress', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.Completed,
+      acceptedOfferId: 'offer-1',
+    });
+    const { service, repairRequestsRepository } = BuildService(request);
+
+    await expect(
+      service.Reopen('request-1', 'customer-1'),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(repairRequestsRepository.TryReopen).not.toHaveBeenCalled();
   });
 });

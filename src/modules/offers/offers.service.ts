@@ -13,6 +13,7 @@ import {
 import { verificationConfig } from '../../config/verification.config';
 import { appConfig } from '../../config/app.config';
 import { RequestStatus } from '../repair-requests/repair-requests.types';
+import { RepairRequest } from '../repair-requests/entities/repair-request.entity';
 import { IOffersService } from './offers.service.interface';
 import { OfferStatusTransitions } from './state/offer-status.transitions';
 import { ProvidersService } from '../providers/providers.service';
@@ -83,6 +84,7 @@ export class OffersService implements IOffersService {
         kind: 'offer-received',
         payload: {
           to: customer.email,
+          locale: customer.locale,
           customerName: customer.fullName,
           providerName: provider.businessName,
           requestId: request.id,
@@ -147,6 +149,7 @@ export class OffersService implements IOffersService {
         kind: 'offer-accepted',
         payload: {
           to: providerOwner.email,
+          locale: providerOwner.locale,
           providerName: provider.businessName,
           requestId: offer.requestId,
           customerName: customer.fullName,
@@ -168,6 +171,7 @@ export class OffersService implements IOffersService {
         kind: 'offer-accepted-customer',
         payload: {
           to: customer.email,
+          locale: customer.locale,
           customerName: customer.fullName,
           providerName: provider.businessName,
           providerEmail: provider.email,
@@ -229,6 +233,66 @@ export class OffersService implements IOffersService {
     this.logger.info({ offerId, providerOwnerId }, 'Offer withdrawn');
 
     return saved;
+  }
+
+  // Orchestrates both halves of "customer stops working with an already-accepted provider":
+  // RepairRequestsService.Reopen() flips the request back to Open (and re-notifies every
+  // eligible provider as if it were new), then this cancels the offer that used to be accepted
+  // and lets its provider know. One transaction, so a crash mid-way can't leave the request
+  // reopened while its old offer still reads Accepted, or vice versa.
+  @Transactional()
+  async Reopen(requestId: string, customerId: string): Promise<RepairRequest> {
+    const requestBefore = await this.repairRequestsService.FindById(requestId);
+    const offerId = requestBefore.acceptedOfferId;
+    if (!offerId) {
+      this.logger.warn(
+        { requestId, customerId },
+        'Reopen rejected: request has no accepted offer to cancel',
+      );
+      throw new DomainConflictException(
+        'REPAIR_REQUEST_NOT_ACCEPTED',
+        'This repair request has no accepted offer to reopen from',
+      );
+    }
+
+    const offer = await this.FindById(offerId);
+    this.EnsureTransition(offerId, offer.status, OfferStatus.Cancelled);
+
+    const reopened = await this.repairRequestsService.Reopen(
+      requestId,
+      customerId,
+    );
+
+    offer.status = OfferStatus.Cancelled;
+    await this.offersRepository.Save(offer);
+
+    const provider = await this.providersService.FindById(offer.providerId);
+    const providerOwner = await this.usersService.FindById(
+      provider.ownerUserId,
+    );
+    await this.notificationsService.Notify({
+      userId: providerOwner.id,
+      type: NotificationType.OfferCancelled,
+      messageKey: 'offer_cancelled',
+      relatedEntityType: 'offer',
+      relatedEntityId: offer.id,
+      email: {
+        kind: 'offer-cancelled',
+        payload: {
+          to: providerOwner.email,
+          locale: providerOwner.locale,
+          providerName: provider.businessName,
+          requestId,
+        },
+      },
+    });
+
+    this.logger.info(
+      { requestId, offerId, customerId },
+      'Offer cancelled, request reopened',
+    );
+
+    return reopened;
   }
 
   async FindById(id: string): Promise<Offer> {

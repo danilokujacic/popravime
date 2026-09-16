@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { RepairRequest } from './entities/repair-request.entity';
@@ -12,6 +12,7 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { ProvidersModule } from '../providers/providers.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { CitiesModule } from '../cities/cities.module';
+import { OffersModule } from '../offers/offers.module';
 
 @Module({
   imports: [
@@ -24,6 +25,9 @@ import { CitiesModule } from '../cities/cities.module';
     ProvidersModule,
     CategoriesModule,
     CitiesModule,
+    // OffersModule also imports RepairRequestsModule (offer creation/acceptance needs the
+    // request) — forwardRef breaks the otherwise-circular module graph.
+    forwardRef(() => OffersModule),
   ],
   controllers: [RepairRequestsController],
   providers: [RepairRequestsRepository, RepairRequestsService],

@@ -8,6 +8,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { OffersService } from './offers.service';
 import { CreateOfferDto } from './dto/create-offer.dto';
 import { UpdateOfferStatusDto } from './dto/update-offer-status.dto';
@@ -19,6 +20,10 @@ import { OfferStatus } from './offers.types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+import {
+  OFFER_CREATE_THROTTLE,
+  OFFER_STATUS_THROTTLE,
+} from '../infra/rate-limit/rate-limit.constants';
 
 type OfferAction = (
   service: OffersService,
@@ -79,6 +84,7 @@ export class OffersController {
     return OfferResponseMapper.ToDto(offer, customerContact);
   }
 
+  @Throttle(OFFER_CREATE_THROTTLE)
   @Post()
   async Create(
     @CurrentUser() user: AuthenticatedUser,
@@ -96,6 +102,7 @@ export class OffersController {
     return OfferResponseMapper.ToDto(offer);
   }
 
+  @Throttle(OFFER_STATUS_THROTTLE)
   @Patch(':id/status')
   async UpdateStatus(
     @Param('id', ParseUUIDPipe) id: string,

@@ -2,6 +2,7 @@ import type { Queue } from 'bullmq';
 import type { PinoLogger } from 'nestjs-pino';
 import { EmailQueueService } from './email-queue.service';
 import { EmailJob } from './email.types';
+import { Locale } from '../../users/users.types';
 
 describe('EmailQueueService', () => {
   it('adds the job to the queue and logs the enqueue with its correlation id', async () => {
@@ -10,7 +11,11 @@ describe('EmailQueueService', () => {
     const service = new EmailQueueService(queue, logger);
     const job: EmailJob = {
       kind: 'welcome',
-      payload: { to: 'user@popravime.me', fullName: 'Test User' },
+      payload: {
+        to: 'user@popravime.me',
+        locale: Locale.En,
+        fullName: 'Test User',
+      },
       correlationId: 'correlation-1',
     };
 

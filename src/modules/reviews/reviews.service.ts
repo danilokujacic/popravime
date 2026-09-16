@@ -68,6 +68,7 @@ export class ReviewsService implements IReviewsService {
         kind: 'review-created',
         payload: {
           to: providerOwner.email,
+          locale: providerOwner.locale,
           providerName: provider.businessName,
           rating: input.rating,
           requestId: request.id,

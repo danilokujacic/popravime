@@ -58,4 +58,22 @@ describe('OfferStatusTransitions', () => {
       ),
     ).toBe(false);
   });
+
+  it('allows an accepted offer to be cancelled (customer reopens the request)', () => {
+    expect(
+      OfferStatusTransitions.CanTransition(
+        OfferStatus.Accepted,
+        OfferStatus.Cancelled,
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects any transition out of cancelled', () => {
+    expect(
+      OfferStatusTransitions.CanTransition(
+        OfferStatus.Cancelled,
+        OfferStatus.Pending,
+      ),
+    ).toBe(false);
+  });
 });
