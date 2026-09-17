@@ -65,9 +65,11 @@ export class OffersController {
 
     const items = await Promise.all(
       result.items.map(async (offer) => {
-        const customerContact =
-          await this.offersService.ResolveCustomerContactForOffer(offer, user);
-        return OfferResponseMapper.ToDto(offer, customerContact);
+        const [customerContact, providerContact] = await Promise.all([
+          this.offersService.ResolveCustomerContactForOffer(offer, user),
+          this.offersService.ResolveProviderContactForOffer(offer, user),
+        ]);
+        return OfferResponseMapper.ToDto(offer, customerContact, providerContact);
       }),
     );
     return { ...result, items };
@@ -79,9 +81,11 @@ export class OffersController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<OfferResponseDto> {
     const offer = await this.offersService.FindByIdForViewer(id, user);
-    const customerContact =
-      await this.offersService.ResolveCustomerContactForOffer(offer, user);
-    return OfferResponseMapper.ToDto(offer, customerContact);
+    const [customerContact, providerContact] = await Promise.all([
+      this.offersService.ResolveCustomerContactForOffer(offer, user),
+      this.offersService.ResolveProviderContactForOffer(offer, user),
+    ]);
+    return OfferResponseMapper.ToDto(offer, customerContact, providerContact);
   }
 
   @Throttle(OFFER_CREATE_THROTTLE)

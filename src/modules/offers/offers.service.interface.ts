@@ -3,6 +3,7 @@ import { CreateOfferInput, ListOffersFilter } from './offers.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { CustomerContactDto } from './dto/customer-contact.dto';
+import { ProviderContactDto } from './dto/provider-contact.dto';
 import { RepairRequest } from '../repair-requests/entities/repair-request.entity';
 
 export interface IOffersService {
@@ -28,4 +29,8 @@ export interface IOffersService {
     offer: Offer,
     viewer: AuthenticatedUser,
   ): Promise<CustomerContactDto | null>;
+  ResolveProviderContactForOffer(
+    offer: Offer,
+    viewer: AuthenticatedUser,
+  ): Promise<ProviderContactDto | null>;
 }

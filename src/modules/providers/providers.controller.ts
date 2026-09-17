@@ -21,6 +21,7 @@ import { UpdateProviderDto } from './dto/update-provider.dto';
 import { ListProvidersQueryDto } from './dto/list-providers-query.dto';
 import { AddGalleryImageDto } from './dto/add-gallery-image.dto';
 import { ProviderResponseDto } from './dto/provider-response.dto';
+import { ProviderOwnerResponseDto } from './dto/provider-owner-response.dto';
 import { ProviderGalleryResponseDto } from './dto/provider-gallery-response.dto';
 import { ProviderResponseMapper } from './mappers/provider-response.mapper';
 import { ProviderGalleryResponseMapper } from './mappers/provider-gallery-response.mapper';
@@ -56,10 +57,10 @@ export class ProvidersController {
   @Get('me')
   async GetProviderForUser(
     @CurrentUser() user: AuthenticatedUser,
-  ): Promise<ProviderResponseDto> {
+  ): Promise<ProviderOwnerResponseDto> {
     const provider = await this.providersService.GetForUser(user.id);
 
-    return ProviderResponseMapper.ToDto(provider);
+    return ProviderResponseMapper.ToOwnerDto(provider);
   }
 
   @Public()
@@ -88,7 +89,7 @@ export class ProvidersController {
   @Public()
   @Get('slug/:slug')
   async FindBySlug(@Param('slug') slug: string): Promise<ProviderResponseDto> {
-    const provider = await this.providersService.FindBySlug(slug);
+    const provider = await this.providersService.FindPublicBySlug(slug);
     return ProviderResponseMapper.ToDto(provider);
   }
 
@@ -97,7 +98,7 @@ export class ProvidersController {
   async FindOne(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<ProviderResponseDto> {
-    const provider = await this.providersService.FindById(id);
+    const provider = await this.providersService.FindPublicById(id);
     return ProviderResponseMapper.ToDto(provider);
   }
 
@@ -107,7 +108,7 @@ export class ProvidersController {
   async Create(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateProviderDto,
-  ): Promise<ProviderResponseDto> {
+  ): Promise<ProviderOwnerResponseDto> {
     const provider = await this.providersService.Create(user.id, {
       businessName: dto.businessName,
       description: dto.description,
@@ -121,7 +122,7 @@ export class ProvidersController {
       workingHours: dto.workingHours,
       categoryIds: dto.categoryIds,
     });
-    return ProviderResponseMapper.ToDto(provider);
+    return ProviderResponseMapper.ToOwnerDto(provider);
   }
 
   @UseGuards(RolesGuard)
@@ -131,7 +132,7 @@ export class ProvidersController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateProviderDto,
-  ): Promise<ProviderResponseDto> {
+  ): Promise<ProviderOwnerResponseDto> {
     const provider = await this.providersService.Update(id, user.id, {
       businessName: dto.businessName,
       description: dto.description,
@@ -143,7 +144,7 @@ export class ProvidersController {
       website: dto.website,
       workingHours: dto.workingHours,
     });
-    return ProviderResponseMapper.ToDto(provider);
+    return ProviderResponseMapper.ToOwnerDto(provider);
   }
 
   @UseGuards(RolesGuard)

@@ -15,9 +15,15 @@
 # `.env` next to this file must hold the REAL production values — DATABASE_HOST=<Neon host>,
 # DATABASE_SSL=true, STORAGE_ENDPOINT=<R2 endpoint>, EMAIL_HOST=<Brevo relay>,
 # CORS_ORIGIN=<real allow-list>, NODE_ENV=production, REDIS_PASSWORD, GRAFANA_ADMIN_PASSWORD,
-# ... — never the dev `.env` this repo runs against locally. NODE_ENV=production with an
-# empty/"*" CORS_ORIGIN fails fast at boot instead of silently allowing every origin
-# (src/config/env.validation.ts) — set a real one before the first deploy.
+# ALERT_EMAIL_TO (where Grafana sends resource/error alerts) ... — never the dev `.env` this repo
+# runs against locally. NODE_ENV=production with an empty/"*" CORS_ORIGIN fails fast at boot
+# instead of silently allowing every origin (src/config/env.validation.ts) — set a real one
+# before the first deploy.
+#
+# node-exporter/cadvisor/prometheus below are the resource-monitoring stack: node-exporter +
+# cadvisor expose host/container metrics, prometheus scrapes and stores them, and Grafana's
+# Prometheus datasource + grafana/provisioning/alerting/ read from it. Loki/Grafana already
+# existed for logs; this is the CPU/memory/disk half, plus the email alert rules on top of both.
 #
 # Before first deploy: point the host nginx at 127.0.0.1:3000 (see nginx/nginx.conf), issue a
 # TLS cert for the real domain (DEPLOY.md §5), and install the Loki Docker logging driver once
@@ -106,8 +112,9 @@ services:
       retries: 10
       start_period: 10s
 
-  # Self-hosted log visualization, pre-provisioned with the Loki datasource and the "Email
-  # pipeline" dashboard. Bound to the loopback interface only — reach it over an SSH tunnel
+  # Self-hosted log visualization, pre-provisioned with the Loki + Prometheus datasources, the
+  # "Email pipeline" dashboard, and email-alerting rules (see grafana/provisioning/alerting/).
+  # Bound to the loopback interface only — reach it over an SSH tunnel
   # (`ssh -L 4200:127.0.0.1:4200 you@host`, then http://localhost:4200), never opened on the
   # firewall (see design.md decision 1, DEPLOY.md §2).
   grafana:
@@ -117,16 +124,84 @@ services:
     depends_on:
       loki:
         condition: service_healthy
+      prometheus:
+        condition: service_healthy
     ports: [ '127.0.0.1:4200:3000' ]
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
       GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      # Same SMTP relay (Brevo) the app itself sends transactional email through — reused here
+      # so alert emails don't need a second set of credentials. ALERT_EMAIL_TO is only consumed
+      # by grafana/provisioning/alerting/contact-points.yaml, not by the Nest app.
+      GF_SMTP_ENABLED: 'true'
+      GF_SMTP_HOST: '${EMAIL_HOST}:${EMAIL_PORT}'
+      GF_SMTP_USER: ${EMAIL_USER}
+      GF_SMTP_PASSWORD: ${EMAIL_PASSWORD}
+      GF_SMTP_FROM_ADDRESS: ${EMAIL_FROM}
+      GF_SMTP_FROM_NAME: 'Popravime Monitoring'
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO}
     volumes:
       - grafanadata:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
     healthcheck:
       test: [ 'CMD-SHELL', 'wget -q --spider http://localhost:3000/api/health || exit 1' ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Host + per-container resource metrics (CPU/memory/disk/network) — scraped by `prometheus`
+  # below and visualized/alerted on in Grafana. Loopback-only, same as everything else here.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    networks: [ internal ]
+    restart: unless-stopped
+    pid: host
+    ports: [ '127.0.0.1:9100:9100' ]
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+  # Per-container resource metrics. Needs `privileged: true` to read full cgroup/container data
+  # on an arbitrary host — a real (if standard/well-known) increase in this container's blast
+  # radius if it were ever compromised; accepted here since it's loopback-only and unauthenticated
+  # from outside the VM either way. Drop this service if that trade-off isn't acceptable — nothing
+  # else depends on it besides the `cadvisor` Prometheus scrape target and its Grafana panels.
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    networks: [ internal ]
+    restart: unless-stopped
+    privileged: true
+    ports: [ '127.0.0.1:8080:8080' ]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+
+  # Scrapes node-exporter + cadvisor and stores the time series Grafana's Prometheus datasource
+  # (and the resource-alert rules in grafana/provisioning/alerting/) read from.
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    networks: [ internal ]
+    restart: unless-stopped
+    ports: [ '127.0.0.1:9090:9090' ]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'wget -q --spider http://localhost:9090/-/healthy || exit 1' ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -143,3 +218,4 @@ volumes:
   redisdata:
   lokidata:
   grafanadata:
+  promdata:

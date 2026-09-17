@@ -1,0 +1,16 @@
+# Single email contact point for every alert this stack raises. Address comes from
+# ALERT_EMAIL_TO on the grafana container (see docker-compose.prod.yml) — Grafana expands
+# ${VARS} in provisioning files from its own process environment, so this file never needs
+# editing to change who gets paged. Sending itself goes through the same SMTP relay (Brevo) the
+# app already uses for transactional email — see GF_SMTP_* on the grafana service.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: ops-email
+    receivers:
+      - uid: ops-email-receiver
+        type: email
+        settings:
+          addresses: ${ALERT_EMAIL_TO}
+          singleEmail: true

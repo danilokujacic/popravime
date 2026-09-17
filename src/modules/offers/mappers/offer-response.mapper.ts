@@ -1,6 +1,7 @@
 import { Offer } from '../entities/offer.entity';
 import { OfferResponseDto } from '../dto/offer-response.dto';
 import { CustomerContactDto } from '../dto/customer-contact.dto';
+import { ProviderContactDto } from '../dto/provider-contact.dto';
 import { ProviderResponseMapper } from '../../providers/mappers/provider-response.mapper';
 
 export class OfferResponseMapper {
@@ -8,6 +9,7 @@ export class OfferResponseMapper {
     this: void,
     offer: Offer,
     customerContact: CustomerContactDto | null = null,
+    providerContact: ProviderContactDto | null = null,
   ): OfferResponseDto {
     const dto = new OfferResponseDto();
     dto.id = offer.id;
@@ -22,6 +24,7 @@ export class OfferResponseMapper {
     dto.status = offer.status;
     dto.createdAt = offer.createdAt;
     dto.customerContact = customerContact;
+    dto.providerContact = providerContact;
     return dto;
   }
 }

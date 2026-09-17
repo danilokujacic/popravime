@@ -20,6 +20,8 @@ export interface IProvidersService {
   GetForUser(userId: string): Promise<Provider>;
   FindById(id: string): Promise<Provider>;
   FindBySlug(slug: string): Promise<Provider>;
+  FindPublicById(id: string): Promise<Provider>;
+  FindPublicBySlug(slug: string): Promise<Provider>;
   List(
     filter: ListProvidersFilter,
     page: number,

@@ -1,0 +1,180 @@
+# Every rule follows the same three-stage pipeline Grafana's own alert editor builds for a
+# single-condition alert: a range Query (A) against Prometheus or Loki, a Reduce (B, "last") that
+# collapses it to one number, and a Threshold (C) that fires when that number crosses the line.
+# `condition: C` is what actually gets evaluated; A/B just feed it. Verify these render without
+# a "failed to migrate"/parse error in Grafana's Alerting > Alert rules UI after first deploy —
+# this file is written against Grafana 10.4.2's documented provisioning schema but was not
+# exercised against a live instance before being committed.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: Resource alerts
+    folder: Popravime Alerts
+    interval: 1m
+    rules:
+      - uid: popravime-high-cpu
+        title: High CPU usage
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Host CPU usage has stayed above 85% for 5+ minutes'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              refId: A
+              expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+              range: true
+              instant: false
+              intervalMs: 15000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [85]
+
+      - uid: popravime-high-memory
+        title: High memory usage
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Host memory usage has stayed above 90% for 5+ minutes'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              refId: A
+              expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
+              range: true
+              instant: false
+              intervalMs: 15000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [90]
+
+      - uid: popravime-low-disk
+        title: Low disk space
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Root filesystem usage has stayed above 85% for 5+ minutes'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              refId: A
+              expr: (1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})) * 100
+              range: true
+              instant: false
+              intervalMs: 15000
+              maxDataPoints: 43200
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [85]
+
+  - orgId: 1
+    name: Application alerts
+    folder: Popravime Alerts
+    interval: 1m
+    rules:
+      - uid: popravime-high-error-rate
+        title: High application error rate
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'More than 20 error-level log lines from the API in the last 5 minutes'
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              refId: A
+              queryType: range
+              expr: sum(count_over_time({job="popravime-api"} | json | level="error" [5m]))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [20]

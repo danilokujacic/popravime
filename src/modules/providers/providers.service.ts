@@ -6,6 +6,7 @@ import { ProviderCategoryRepository } from './repositories/provider-category.rep
 import { Provider } from './entities/provider.entity';
 import {
   CreateProviderInput,
+  IsEligibleVerificationStatus,
   ListProvidersFilter,
   UpdateProviderInput,
   UpdateRatingStatsInput,
@@ -141,6 +142,22 @@ export class ProvidersService implements IProvidersService {
     return provider;
   }
 
+  // For the @Public() single-record lookups only — List() already filters by eligible
+  // verification status, but FindById/FindBySlug above don't (owners/admins/other services need
+  // unfiltered access to a provider regardless of its status). Without this, a Rejected or
+  // Pending provider's full profile stays fetchable by anyone who has its id/slug.
+  async FindPublicById(id: string): Promise<Provider> {
+    const provider = await this.FindById(id);
+    this.EnsureEligible(provider.verificationStatus);
+    return provider;
+  }
+
+  async FindPublicBySlug(slug: string): Promise<Provider> {
+    const provider = await this.FindBySlug(slug);
+    this.EnsureEligible(provider.verificationStatus);
+    return provider;
+  }
+
   async List(
     filter: ListProvidersFilter,
     page: number,
@@ -213,6 +230,15 @@ export class ProvidersService implements IProvidersService {
     );
 
     return saved;
+  }
+
+  private EnsureEligible(status: VerificationStatus): void {
+    if (!IsEligibleVerificationStatus(status, this.verification.required)) {
+      throw new DomainNotFoundException(
+        'PROVIDER_NOT_FOUND',
+        'Provider not found',
+      );
+    }
   }
 
   private EnsureOwnership(provider: Provider, ownerUserId: string): void {

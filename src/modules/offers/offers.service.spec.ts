@@ -968,4 +968,76 @@ describe('OffersService viewer scoping', () => {
       expect(result?.email).toBe('kupac@popravime.me');
     });
   });
+
+  describe('ResolveProviderContactForOffer', () => {
+    const acceptedOfferWithContact = () =>
+      BuildOffer({
+        status: OfferStatus.Accepted,
+        provider: BuildProvider({
+          phone: '+38267111111',
+          email: 'ana@repair.me',
+        }),
+      });
+
+    it('returns null for a pending offer regardless of viewer', async () => {
+      const { service, offer } = BuildService({
+        offer: BuildOffer({
+          status: OfferStatus.Pending,
+          provider: BuildProvider({
+            phone: '+38267111111',
+            email: 'ana@repair.me',
+          }),
+        }),
+      });
+
+      const result = await service.ResolveProviderContactForOffer(
+        offer,
+        BuildViewer(),
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null for the provider viewing their own accepted offer', async () => {
+      const { service, offer } = BuildService({
+        offer: acceptedOfferWithContact(),
+      });
+
+      const result = await service.ResolveProviderContactForOffer(
+        offer,
+        BuildViewer({ id: 'provider-owner-1', role: UserRole.ProviderOwner }),
+      );
+
+      expect(result).toBeNull();
+    });
+
+    it("returns the provider's contact for the customer once accepted", async () => {
+      const { service, offer } = BuildService({
+        offer: acceptedOfferWithContact(),
+      });
+
+      const result = await service.ResolveProviderContactForOffer(
+        offer,
+        BuildViewer({ id: 'customer-1', role: UserRole.Customer }),
+      );
+
+      expect(result).toEqual({
+        phone: '+38267111111',
+        email: 'ana@repair.me',
+      });
+    });
+
+    it('returns the provider contact for an admin too', async () => {
+      const { service, offer } = BuildService({
+        offer: acceptedOfferWithContact(),
+      });
+
+      const result = await service.ResolveProviderContactForOffer(
+        offer,
+        BuildViewer(),
+      );
+
+      expect(result?.email).toBe('ana@repair.me');
+    });
+  });
 });

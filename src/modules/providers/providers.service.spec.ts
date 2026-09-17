@@ -6,6 +6,8 @@ import type { IGeocodingService } from '../infra/geocoding/geocoding.service.int
 import { Provider } from './entities/provider.entity';
 import { City } from '../cities/entities/city.entity';
 import { DomainConflictException } from '../../common/exceptions/conflict.exception';
+import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
+import { VerificationStatus } from './providers.types';
 
 function BuildService(categoryIds: string[]) {
   const providerRepository = {} as unknown as ProviderRepository;
@@ -285,5 +287,94 @@ describe('ProvidersService.Update', () => {
     expect(saved.longitude).toBe('20.000000');
     expect(citiesService.FindById).not.toHaveBeenCalled();
     expect(geocodingService.Geocode).not.toHaveBeenCalled();
+  });
+});
+
+function BuildPublicProvider(overrides?: Partial<Provider>): Provider {
+  return {
+    id: 'provider-1',
+    slug: 'ana-repair',
+    verificationStatus: VerificationStatus.Verified,
+    ...overrides,
+  } as Provider;
+}
+
+describe('ProvidersService.FindPublicById / FindPublicBySlug', () => {
+  function BuildService(provider: Provider, verificationRequired = true) {
+    const providerRepository = {
+      FindById: jest.fn().mockResolvedValue(provider),
+      FindBySlug: jest.fn().mockResolvedValue(provider),
+    } as unknown as ProviderRepository;
+    const providerCategoryRepository = {} as unknown as ProviderCategoryRepository;
+    const citiesService = {} as unknown as CitiesService;
+    const geocodingService = {} as unknown as IGeocodingService;
+    const verification = {
+      required: verificationRequired,
+    } as unknown as ConstructorParameters<typeof ProvidersService>[4];
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof ProvidersService>[5];
+
+    const service = new ProvidersService(
+      providerRepository,
+      providerCategoryRepository,
+      citiesService,
+      geocodingService,
+      verification,
+      logger,
+    );
+
+    return { service };
+  }
+
+  it('returns a verified provider by id', async () => {
+    const { service } = BuildService(BuildPublicProvider());
+
+    const result = await service.FindPublicById('provider-1');
+
+    expect(result.id).toBe('provider-1');
+  });
+
+  it('hides a rejected provider behind a 404, even by direct id', async () => {
+    const { service } = BuildService(
+      BuildPublicProvider({ verificationStatus: VerificationStatus.Rejected }),
+    );
+
+    await expect(service.FindPublicById('provider-1')).rejects.toBeInstanceOf(
+      DomainNotFoundException,
+    );
+  });
+
+  it('hides a rejected provider behind a 404 by slug too', async () => {
+    const { service } = BuildService(
+      BuildPublicProvider({ verificationStatus: VerificationStatus.Rejected }),
+    );
+
+    await expect(
+      service.FindPublicBySlug('ana-repair'),
+    ).rejects.toBeInstanceOf(DomainNotFoundException);
+  });
+
+  it('hides a pending provider when verification is required', async () => {
+    const { service } = BuildService(
+      BuildPublicProvider({ verificationStatus: VerificationStatus.Pending }),
+      true,
+    );
+
+    await expect(service.FindPublicById('provider-1')).rejects.toBeInstanceOf(
+      DomainNotFoundException,
+    );
+  });
+
+  it('allows a pending provider when verification is not required', async () => {
+    const { service } = BuildService(
+      BuildPublicProvider({ verificationStatus: VerificationStatus.Pending }),
+      false,
+    );
+
+    const result = await service.FindPublicById('provider-1');
+
+    expect(result.id).toBe('provider-1');
   });
 });

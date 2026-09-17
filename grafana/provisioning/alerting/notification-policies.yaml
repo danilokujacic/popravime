@@ -1,0 +1,11 @@
+# Every alert, regardless of which rule fired it, routes to the one email contact point —
+# there's no on-call rotation or severity-based fan-out to model here yet.
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: ops-email
+    group_by: ['alertname']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

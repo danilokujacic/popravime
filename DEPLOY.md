@@ -3,7 +3,9 @@
 Target stack: **Hetzner** VM (Docker Compose for the app + its infra) + **Neon** Postgres +
 **Cloudflare R2** (S3-compatible object storage) + a **local Redis** container on the Hetzner
 VM + the **host's own nginx** (installed directly on the VM, not containerized) as the reverse
-proxy / TLS terminator + self-hosted **Loki**/**Grafana** for logs.
+proxy / TLS terminator + self-hosted **Loki**/**Grafana** for logs + self-hosted
+**Prometheus**/**node-exporter**/**cadvisor** for resource metrics, with Grafana Alerting emailing
+out on high CPU/memory/disk or a spike in application error logs.
 
 This assumes `docker-compose.prod.yml`'s `api` service and `nginx/nginx.conf` (installed into
 the host's nginx — see §5) are already in place.
@@ -39,10 +41,12 @@ only, not deployed here). Every `docker compose` command below targets the forme
 
 1. Provision the VM, install Docker + the Docker Compose plugin.
 2. Firewall: allow only `22` (SSH), `80` (HTTP, for ACME + the HTTPS redirect), and `443`
-   (HTTPS). Everything else (Postgres/Redis/MinIO/Loki/Grafana ports the local compose file also
-   exposes) should not be reachable from outside the VM — Grafana in particular is reached over
-   an SSH tunnel (`ssh -L 4200:127.0.0.1:4200 you@your-domain.tld`, then
-   `http://localhost:4200` locally), never opened on the firewall.
+   (HTTPS). Everything else (Postgres/Redis/MinIO/Loki/Grafana/Prometheus/node-exporter/cadvisor
+   ports the compose files publish) should not be reachable from outside the VM — every one of
+   them is bound to `127.0.0.1` in `docker-compose.prod.yml`. Grafana in particular is reached
+   over an SSH tunnel (`ssh -L 4200:127.0.0.1:4200 you@your-domain.tld`, then
+   `http://localhost:4200` locally; tunnel `9090` too if you want to query Prometheus directly),
+   never opened on the firewall.
 3. Create a non-root deploy user with SSH key auth; disable password SSH login.
 4. Clone the repo onto the VM (or push a built image — either way, `docker-compose.prod.yml` and
    `nginx/nginx.conf` need to be present on the host).
@@ -136,19 +140,27 @@ Copy `.env.example` to `.env` on the Hetzner host and fill in real values:
 | `EMAIL_*` | A real SMTP relay — not Maildev |
 | `PORT` | Leave unset (defaults to `3000`) — `docker-compose.prod.yml` publishes it on `127.0.0.1:3000`, which the host nginx's upstream points at |
 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | Admin login for the self-hosted Grafana container — freshly generated, not the `.env.example` default |
+| `ALERT_EMAIL_TO` | Where Grafana sends resource/error alert emails — e.g. `danilo.kujacic01@gmail.com` |
 
 ## 7. Local infra on the VM
 
-Redis, Loki, and Grafana all run as local containers in production (Postgres/MinIO/Maildev live
-only in `docker-compose.yml`, the local-dev file — production points at Neon/R2/a real SMTP
-relay instead):
+Redis, Loki, Grafana, Prometheus, node-exporter, and cadvisor all run as local containers in
+production (Postgres/MinIO/Maildev live only in `docker-compose.yml`, the local-dev file —
+production points at Neon/R2/a real SMTP relay instead):
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d redis loki grafana
+docker compose -f docker-compose.prod.yml up -d redis loki node-exporter cadvisor prometheus grafana
 ```
 
-Bring these up **before** `api` (§10) — `depends_on: loki: condition: service_healthy` on `api`
-needs Loki already accepting writes.
+Bring these up **before** `api` (§10) — `depends_on: loki/prometheus: condition: service_healthy`
+on `api`/`grafana` needs both already up. After Grafana starts, open it over the SSH tunnel
+(§3) and check **Alerting → Alert rules** for the four rules in
+`grafana/provisioning/alerting/rules.yaml` (High CPU usage, High memory usage, Low disk space,
+High application error rate) — confirm each shows "Normal" with no provisioning/parse error, and
+send a test notification from **Alerting → Contact points → ops-email** to confirm mail actually
+reaches `ALERT_EMAIL_TO` through the Brevo relay. This file was written against Grafana 10.4.2's
+documented alert-provisioning schema but not exercised against a live instance before being
+committed — treat this check as required, not optional, on first deploy.
 
 ## 8. Run migrations against Neon
 
@@ -219,10 +231,10 @@ email), and confirm the failure — provider error code, rejected recipient, no 
   --no-deps` the previous image tag for `api` and investigate before retrying.
 - If a migration needs reverting: `pnpm typeorm -- migration:revert`, or fall back to Neon's
   point-in-time restore for data-level issues.
-- Loki/Grafana are purely additive observability — dropping the `loki`/`grafana` services and
-  the `api` logging driver override, then redeploying, fully reverts that piece with no data
-  migration involved; the app has no runtime dependency on either being up (§4a's
-  `mode: non-blocking`).
+- Loki/Grafana/Prometheus/node-exporter/cadvisor are purely additive observability — dropping
+  those services and the `api` logging driver override, then redeploying, fully reverts that
+  piece with no data migration involved; the app has no runtime dependency on any of them being
+  up (§4a's `mode: non-blocking` covers Loki; `api` never talks to Prometheus/Grafana at all).
 
 ## Known limitation
 

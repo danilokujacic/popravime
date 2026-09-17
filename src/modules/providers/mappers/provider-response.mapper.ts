@@ -1,5 +1,6 @@
 import { Provider } from '../entities/provider.entity';
 import { ProviderResponseDto } from '../dto/provider-response.dto';
+import { ProviderOwnerResponseDto } from '../dto/provider-owner-response.dto';
 
 export class ProviderResponseMapper {
   static ToDto(this: void, provider: Provider): ProviderResponseDto {
@@ -13,8 +14,6 @@ export class ProviderResponseMapper {
     dto.cityId = provider.cityId;
     dto.latitude = provider.latitude;
     dto.longitude = provider.longitude;
-    dto.phone = provider.phone;
-    dto.email = provider.email;
     dto.website = provider.website;
     dto.workingHours = provider.workingHours;
     dto.verificationStatus = provider.verificationStatus;
@@ -22,6 +21,14 @@ export class ProviderResponseMapper {
     dto.averageRating = provider.averageRating;
     dto.reviewCount = provider.reviewCount;
     dto.createdAt = provider.createdAt;
+    return dto;
+  }
+
+  static ToOwnerDto(this: void, provider: Provider): ProviderOwnerResponseDto {
+    const dto = new ProviderOwnerResponseDto();
+    Object.assign(dto, ProviderResponseMapper.ToDto(provider));
+    dto.phone = provider.phone;
+    dto.email = provider.email;
     return dto;
   }
 }

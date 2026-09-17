@@ -24,6 +24,7 @@ import { NotificationType } from '../notifications/notifications.types';
 import { UserRole } from '../users/users.types';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { CustomerContactDto } from './dto/customer-contact.dto';
+import { ProviderContactDto } from './dto/provider-contact.dto';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
@@ -350,6 +351,22 @@ export class OffersService implements IOffersService {
       fullName: customer.fullName,
       email: customer.email,
       phone: customer.phone,
+    };
+  }
+
+  // Mirrors ResolveCustomerContactForOffer: only once the offer is actually Accepted, and only
+  // for the viewer entitled to it (the customer who owns the request, or an admin) — a provider
+  // owner viewing their own offers never needs this back, and any other status keeps it private.
+  async ResolveProviderContactForOffer(
+    offer: Offer,
+    viewer: AuthenticatedUser,
+  ): Promise<ProviderContactDto | null> {
+    if (offer.status !== OfferStatus.Accepted) return null;
+    if (viewer.role === UserRole.ProviderOwner) return null;
+
+    return {
+      phone: offer.provider.phone,
+      email: offer.provider.email,
     };
   }
 
