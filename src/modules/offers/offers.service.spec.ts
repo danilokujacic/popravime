@@ -38,6 +38,7 @@ function BuildProvider(overrides?: Partial<Provider>): Provider {
     ownerUserId: 'provider-owner-1',
     businessName: 'Ana Repair',
     slug: 'ana-repair',
+    approved: true,
     verificationStatus: VerificationStatus.Pending,
     ...overrides,
   } as Provider;
@@ -239,7 +240,8 @@ describe('OffersService.Reopen', () => {
     request?: { id: string; acceptedOfferId: string | null };
     reopenMock?: jest.Mock;
   }) {
-    const offer = overrides?.offer ?? BuildOffer({ status: OfferStatus.Accepted });
+    const offer =
+      overrides?.offer ?? BuildOffer({ status: OfferStatus.Accepted });
     const request = overrides?.request ?? {
       id: 'request-1',
       acceptedOfferId: 'offer-1',
@@ -307,8 +309,12 @@ describe('OffersService.Reopen', () => {
   }
 
   it('reopens the request and cancels the previously accepted offer', async () => {
-    const { service, offersRepository, repairRequestsService, notificationsService } =
-      BuildService();
+    const {
+      service,
+      offersRepository,
+      repairRequestsService,
+      notificationsService,
+    } = BuildService();
 
     const result = await service.Reopen('request-1', 'customer-1');
 
@@ -544,6 +550,29 @@ describe('OffersService.Create', () => {
     });
 
     expect(offersRepository.Create).toHaveBeenCalled();
+  });
+
+  it('rejects submitting an offer for a provider an admin has not approved', async () => {
+    const { service, offersRepository } = BuildService(
+      BuildRequest(),
+      BuildProvider({
+        approved: false,
+        verificationStatus: VerificationStatus.Verified,
+      }),
+      false,
+    );
+
+    await expect(
+      service.Create('provider-owner-1', {
+        requestId: 'request-1',
+        providerId: 'provider-1',
+        priceMin: '3000',
+        priceMax: '6000',
+        estimatedDuration: '2 days',
+        partsType: PartsType.Original,
+      }),
+    ).rejects.toBeInstanceOf(DomainForbiddenException);
+    expect(offersRepository.Create).not.toHaveBeenCalled();
   });
 
   it('rejects submitting an offer for a rejected provider regardless of the verification-required setting', async () => {

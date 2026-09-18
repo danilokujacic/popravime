@@ -78,6 +78,9 @@ export class Provider {
   @Column({ name: 'is_certified', type: 'boolean', default: false })
   isCertified: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  approved: boolean;
+
   @Column({
     name: 'average_rating',
     type: 'decimal',

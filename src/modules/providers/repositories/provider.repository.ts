@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Provider } from '../entities/provider.entity';
 import {
   EligibleStatuses,
+  ListProvidersForAdminFilter,
   ListProvidersFilter,
   VerificationStatus,
 } from '../providers.types';
@@ -48,6 +49,7 @@ export class ProviderRepository {
           search: filter.search ? `%${filter.search}%` : null,
         },
       )
+      .andWhere('provider.approved = true')
       .andWhere('provider.verificationStatus = ANY(:eligibleStatuses)', {
         eligibleStatuses: EligibleStatuses(this.config.required),
       })
@@ -57,6 +59,28 @@ export class ProviderRepository {
 
     const [items, total] = await query.getManyAndCount();
     return { items, total, page, limit };
+  }
+
+  async ListForAdmin(
+    filter: ListProvidersForAdminFilter,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedResult<Provider>> {
+    const [items, total] = await this.repository
+      .createQueryBuilder('provider')
+      .innerJoinAndSelect('provider.ownerUser', 'ownerUser')
+      .where('(:approved::boolean IS NULL OR provider.approved = :approved)', {
+        approved: filter.approved ?? null,
+      })
+      .orderBy('provider.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+    return { items, total, page, limit };
+  }
+
+  async SetApproved(id: string, approved: boolean): Promise<void> {
+    await this.repository.update({ id }, { approved });
   }
 
   FindById(id: string): Promise<Provider | null> {
@@ -70,6 +94,7 @@ export class ProviderRepository {
       .createQueryBuilder('provider')
       .innerJoinAndSelect('provider.ownerUser', 'ownerUser')
       .where(CATEGORY_EXISTS_CLAUSE, { categoryId })
+      .andWhere('provider.approved = true')
       .andWhere('provider.verificationStatus = ANY(:eligibleStatuses)', {
         eligibleStatuses: EligibleStatuses(this.config.required),
       })

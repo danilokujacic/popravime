@@ -15,9 +15,9 @@ describe('IsEligibleVerificationStatus', () => {
   });
 
   it('treats a pending provider as eligible only when verification is not required', () => {
-    expect(
-      IsEligibleVerificationStatus(VerificationStatus.Pending, true),
-    ).toBe(false);
+    expect(IsEligibleVerificationStatus(VerificationStatus.Pending, true)).toBe(
+      false,
+    );
     expect(
       IsEligibleVerificationStatus(VerificationStatus.Pending, false),
     ).toBe(true);

@@ -6,8 +6,9 @@ import { ProviderCategoryRepository } from './repositories/provider-category.rep
 import { Provider } from './entities/provider.entity';
 import {
   CreateProviderInput,
-  IsEligibleVerificationStatus,
+  IsProviderEligible,
   ListProvidersFilter,
+  ListProvidersForAdminFilter,
   UpdateProviderInput,
   UpdateRatingStatsInput,
   UpdateVerificationStatusInput,
@@ -148,13 +149,13 @@ export class ProvidersService implements IProvidersService {
   // Pending provider's full profile stays fetchable by anyone who has its id/slug.
   async FindPublicById(id: string): Promise<Provider> {
     const provider = await this.FindById(id);
-    this.EnsureEligible(provider.verificationStatus);
+    this.EnsureEligible(provider);
     return provider;
   }
 
   async FindPublicBySlug(slug: string): Promise<Provider> {
     const provider = await this.FindBySlug(slug);
-    this.EnsureEligible(provider.verificationStatus);
+    this.EnsureEligible(provider);
     return provider;
   }
 
@@ -175,6 +176,21 @@ export class ProvidersService implements IProvidersService {
       'Providers listed',
     );
     return result;
+  }
+
+  ListForAdmin(
+    filter: ListProvidersForAdminFilter,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedResult<Provider>> {
+    return this.providerRepository.ListForAdmin(filter, page, limit);
+  }
+
+  async SetApproved(id: string, approved: boolean): Promise<Provider> {
+    await this.FindById(id);
+    await this.providerRepository.SetApproved(id, approved);
+    this.logger.info({ providerId: id, approved }, 'Provider approval changed');
+    return this.FindById(id);
   }
 
   CountByVerificationStatus(): Promise<Record<VerificationStatus, number>> {
@@ -232,8 +248,8 @@ export class ProvidersService implements IProvidersService {
     return saved;
   }
 
-  private EnsureEligible(status: VerificationStatus): void {
-    if (!IsEligibleVerificationStatus(status, this.verification.required)) {
+  private EnsureEligible(provider: Provider): void {
+    if (!IsProviderEligible(provider, this.verification.required)) {
       throw new DomainNotFoundException(
         'PROVIDER_NOT_FOUND',
         'Provider not found',
@@ -266,12 +282,18 @@ export class ProvidersService implements IProvidersService {
     cityName: string,
   ): Promise<{ latitude: string | null; longitude: string | null }> {
     if (HasExplicitCoordinates(input)) {
-      return { latitude: input.latitude ?? null, longitude: input.longitude ?? null };
+      return {
+        latitude: input.latitude ?? null,
+        longitude: input.longitude ?? null,
+      };
     }
     const geocode = await this.geocodingService.Geocode(
       `${input.address}, ${cityName}, Montenegro`,
     );
-    return { latitude: geocode?.latitude ?? null, longitude: geocode?.longitude ?? null };
+    return {
+      latitude: geocode?.latitude ?? null,
+      longitude: geocode?.longitude ?? null,
+    };
   }
 
   private async ApplyCoordinates(

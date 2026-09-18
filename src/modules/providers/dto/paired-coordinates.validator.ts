@@ -10,9 +10,7 @@ interface CoordinatesDto {
 }
 
 @ValidatorConstraint({ name: 'PairedCoordinates' })
-export class PairedCoordinatesConstraint
-  implements ValidatorConstraintInterface
-{
+export class PairedCoordinatesConstraint implements ValidatorConstraintInterface {
   validate(_value: unknown, args: ValidationArguments): boolean {
     const dto = args.object as CoordinatesDto;
     return (dto.latitude == null) === (dto.longitude == null);

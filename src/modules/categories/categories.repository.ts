@@ -59,7 +59,7 @@ export class CategoriesRepository {
       .leftJoin(
         'providers',
         'provider',
-        'provider.id = pc.provider_id AND provider.verification_status = ANY(:eligibleStatuses)',
+        'provider.id = pc.provider_id AND provider.approved = true AND provider.verification_status = ANY(:eligibleStatuses)',
         { eligibleStatuses },
       )
       .select('category.id', 'id')

@@ -14,6 +14,16 @@ export function IsEligibleVerificationStatus(
   );
 }
 
+export function IsProviderEligible(
+  provider: { approved: boolean; verificationStatus: VerificationStatus },
+  required: boolean,
+): boolean {
+  return (
+    provider.approved &&
+    IsEligibleVerificationStatus(provider.verificationStatus, required)
+  );
+}
+
 export function EligibleStatuses(required: boolean): VerificationStatus[] {
   return required
     ? [VerificationStatus.Verified]
@@ -67,6 +77,10 @@ export interface AddGalleryImageInput {
   fileName: string;
   contentType: string;
   caption?: string;
+}
+
+export interface ListProvidersForAdminFilter {
+  approved?: boolean;
 }
 
 export interface ListProvidersFilter {

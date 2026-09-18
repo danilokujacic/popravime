@@ -7,13 +7,14 @@ import { Offer } from './entities/offer.entity';
 import { OfferStatus } from './offers.types';
 import type { CreateOfferInput, ListOffersFilter } from './offers.types';
 import {
-  IsEligibleVerificationStatus,
+  IsProviderEligible,
   VerificationStatus,
 } from '../providers/providers.types';
 import { verificationConfig } from '../../config/verification.config';
 import { appConfig } from '../../config/app.config';
 import { RequestStatus } from '../repair-requests/repair-requests.types';
 import { RepairRequest } from '../repair-requests/entities/repair-request.entity';
+import { Provider } from '../providers/entities/provider.entity';
 import { IOffersService } from './offers.service.interface';
 import { OfferStatusTransitions } from './state/offer-status.transitions';
 import { ProvidersService } from '../providers/providers.service';
@@ -53,7 +54,7 @@ export class OffersService implements IOffersService {
   ): Promise<Offer> {
     const provider = await this.providersService.FindById(input.providerId);
     this.EnsureProviderOwnership(provider.ownerUserId, providerOwnerId);
-    this.EnsureProviderEligible(provider.verificationStatus);
+    this.EnsureProviderEligible(provider);
 
     const request = await this.repairRequestsService.FindById(input.requestId);
     this.EnsureAcceptingOffers(input.requestId, request.status);
@@ -423,7 +424,10 @@ export class OffersService implements IOffersService {
     }
   }
 
-  private EnsureAcceptingOffers(requestId: string, status: RequestStatus): void {
+  private EnsureAcceptingOffers(
+    requestId: string,
+    status: RequestStatus,
+  ): void {
     const acceptsOffers =
       status === RequestStatus.Open || status === RequestStatus.OffersReceived;
     if (!acceptsOffers) {
@@ -454,16 +458,12 @@ export class OffersService implements IOffersService {
     }
   }
 
-  private EnsureProviderEligible(verificationStatus: VerificationStatus): void {
-    if (
-      !IsEligibleVerificationStatus(
-        verificationStatus,
-        this.verification.required,
-      )
-    ) {
+  private EnsureProviderEligible(provider: Provider): void {
+    if (!IsProviderEligible(provider, this.verification.required)) {
       this.logger.warn(
         {
-          verificationStatus,
+          verificationStatus: provider.verificationStatus,
+          approved: provider.approved,
           verificationRequired: this.verification.required,
         },
         'Offer rejected: provider not eligible',

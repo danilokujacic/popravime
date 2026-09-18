@@ -6,4 +6,5 @@ import { ProviderResponseDto } from './provider-response.dto';
 export class ProviderOwnerResponseDto extends ProviderResponseDto {
   phone: string | null;
   email: string | null;
+  approved: boolean;
 }

@@ -191,7 +191,8 @@ describe('ProvidersService.Update', () => {
       FindById: jest.fn().mockResolvedValue(provider),
       Save: jest.fn().mockImplementation((value) => Promise.resolve(value)),
     } as unknown as ProviderRepository;
-    const providerCategoryRepository = {} as unknown as ProviderCategoryRepository;
+    const providerCategoryRepository =
+      {} as unknown as ProviderCategoryRepository;
     const citiesService = {
       FindById: jest.fn().mockResolvedValue(BuildCity()),
     } as unknown as CitiesService;
@@ -220,8 +221,7 @@ describe('ProvidersService.Update', () => {
 
   it('updates only the coordinates, leaving the address and geocoding untouched', async () => {
     const provider = BuildExistingProvider();
-    const { service, citiesService, geocodingService } =
-      BuildService(provider);
+    const { service, citiesService, geocodingService } = BuildService(provider);
 
     const saved = await service.Update('provider-1', 'owner-1', {
       latitude: '11.000000',
@@ -237,8 +237,7 @@ describe('ProvidersService.Update', () => {
 
   it('stores explicit coordinates and skips geocoding even when the address also changes', async () => {
     const provider = BuildExistingProvider();
-    const { service, citiesService, geocodingService } =
-      BuildService(provider);
+    const { service, citiesService, geocodingService } = BuildService(provider);
 
     const saved = await service.Update('provider-1', 'owner-1', {
       address: 'New address 2',
@@ -255,8 +254,7 @@ describe('ProvidersService.Update', () => {
 
   it('falls back to geocoding the new address when no coordinates are supplied', async () => {
     const provider = BuildExistingProvider();
-    const { service, citiesService, geocodingService } =
-      BuildService(provider);
+    const { service, citiesService, geocodingService } = BuildService(provider);
     (geocodingService.Geocode as jest.Mock).mockResolvedValue({
       latitude: '33.000000',
       longitude: '44.000000',
@@ -276,8 +274,7 @@ describe('ProvidersService.Update', () => {
 
   it('leaves coordinates untouched when neither address nor coordinates are supplied', async () => {
     const provider = BuildExistingProvider();
-    const { service, citiesService, geocodingService } =
-      BuildService(provider);
+    const { service, citiesService, geocodingService } = BuildService(provider);
 
     const saved = await service.Update('provider-1', 'owner-1', {
       businessName: 'Renamed Repair',
@@ -294,6 +291,7 @@ function BuildPublicProvider(overrides?: Partial<Provider>): Provider {
   return {
     id: 'provider-1',
     slug: 'ana-repair',
+    approved: true,
     verificationStatus: VerificationStatus.Verified,
     ...overrides,
   } as Provider;
@@ -305,7 +303,8 @@ describe('ProvidersService.FindPublicById / FindPublicBySlug', () => {
       FindById: jest.fn().mockResolvedValue(provider),
       FindBySlug: jest.fn().mockResolvedValue(provider),
     } as unknown as ProviderRepository;
-    const providerCategoryRepository = {} as unknown as ProviderCategoryRepository;
+    const providerCategoryRepository =
+      {} as unknown as ProviderCategoryRepository;
     const citiesService = {} as unknown as CitiesService;
     const geocodingService = {} as unknown as IGeocodingService;
     const verification = {
@@ -346,14 +345,30 @@ describe('ProvidersService.FindPublicById / FindPublicBySlug', () => {
     );
   });
 
+  it('hides an unapproved provider behind a 404, even a verified one', async () => {
+    const { service } = BuildService(
+      BuildPublicProvider({
+        approved: false,
+        verificationStatus: VerificationStatus.Verified,
+      }),
+    );
+
+    await expect(service.FindPublicById('provider-1')).rejects.toBeInstanceOf(
+      DomainNotFoundException,
+    );
+    await expect(service.FindPublicBySlug('ana-repair')).rejects.toBeInstanceOf(
+      DomainNotFoundException,
+    );
+  });
+
   it('hides a rejected provider behind a 404 by slug too', async () => {
     const { service } = BuildService(
       BuildPublicProvider({ verificationStatus: VerificationStatus.Rejected }),
     );
 
-    await expect(
-      service.FindPublicBySlug('ana-repair'),
-    ).rejects.toBeInstanceOf(DomainNotFoundException);
+    await expect(service.FindPublicBySlug('ana-repair')).rejects.toBeInstanceOf(
+      DomainNotFoundException,
+    );
   });
 
   it('hides a pending provider when verification is required', async () => {

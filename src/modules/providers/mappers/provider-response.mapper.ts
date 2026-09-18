@@ -29,6 +29,7 @@ export class ProviderResponseMapper {
     Object.assign(dto, ProviderResponseMapper.ToDto(provider));
     dto.phone = provider.phone;
     dto.email = provider.email;
+    dto.approved = provider.approved;
     return dto;
   }
 }
