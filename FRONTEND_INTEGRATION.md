@@ -397,7 +397,8 @@ enforced source of truth (`413 Payload Too Large` / `415 Unsupported Media Type`
 | `POST /verification-requests` | `document` | 10 MB | image types above + `application/pdf` |
 | `POST /messages` | `attachment` (optional) | 10 MB | image types above + `application/pdf` |
 
-**Private files.** Repair-request photos, message attachments and verification documents are not
+**Private files (only when `STORAGE_PRIVATE_BUCKET` is set; otherwise these fields carry plain
+public URLs as before).** Repair-request photos, message attachments and verification documents are not
 publicly readable. The API returns each one as a short-lived signed link (in `photo_urls`,
 `attachment_url` and `document_url`), valid for `STORAGE_SIGNED_URL_TTL_SECONDS` (default 1 hour)
 and only to users who may see that request, conversation or document. Never cache or store these

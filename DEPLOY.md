@@ -30,12 +30,14 @@ only, not deployed here). Every `docker compose` command below targets the forme
 
 ## 2. Cloudflare R2 (object storage)
 
-Two buckets, because R2 makes public access a per-bucket setting:
+One bucket is enough to run the app (everything public, as before). A second, private bucket is
+optional but recommended, because R2 makes public access a per-bucket setting:
 
 1. Create the **public** bucket (provider gallery images only) and set up either its public dev
    URL or a custom domain for public reads, noted as `STORAGE_PUBLIC_URL`. Env: `STORAGE_BUCKET`.
-2. Create the **private** bucket (repair-request photos, message attachments, verification
-   documents). Leave public access **off**: no `r2.dev` URL, no custom domain. Env:
+2. Optionally create the **private** bucket (repair-request photos, message attachments,
+   verification documents). Skip this step and leave `STORAGE_PRIVATE_BUCKET` empty to keep them
+   in the public bucket. Leave public access **off**: no `r2.dev` URL, no custom domain. Env:
    `STORAGE_PRIVATE_BUCKET`. The API serves these files through short-lived signed links
    (`STORAGE_SIGNED_URL_TTL_SECONDS`, default 1 hour).
 3. Create one R2 API token with read/write access to **both** buckets (access key + secret key).

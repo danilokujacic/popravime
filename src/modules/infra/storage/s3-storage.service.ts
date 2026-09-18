@@ -54,6 +54,11 @@ export class S3StorageService implements StorageService {
   }
 
   async UploadPrivate(input: UploadFileInput): Promise<PrivateUploadResult> {
+    if (!this.config.privateBucket) {
+      const uploaded = await this.Upload(input);
+      return { key: uploaded.key, reference: uploaded.url };
+    }
+
     const key = BuildKey(input.fileName);
     await this.Put(this.config.privateBucket, key, input);
     return { key, reference: `${PRIVATE_REFERENCE_PREFIX}${key}` };
@@ -64,7 +69,7 @@ export class S3StorageService implements StorageService {
   }
 
   async DeletePrivate(key: string): Promise<void> {
-    await this.Remove(this.config.privateBucket, key);
+    await this.Remove(this.RequirePrivateBucket(), key);
   }
 
   GetUrl(key: string): string {
@@ -82,12 +87,19 @@ export class S3StorageService implements StorageService {
       : null;
   }
 
-  SignUrl(key: string): Promise<string> {
-    return getSignedUrl(
+  async SignUrl(key: string): Promise<string> {
+    return await getSignedUrl(
       this.client,
-      new GetObjectCommand({ Bucket: this.config.privateBucket, Key: key }),
+      new GetObjectCommand({ Bucket: this.RequirePrivateBucket(), Key: key }),
       { expiresIn: this.config.signedUrlTtlSeconds },
     );
+  }
+
+  private RequirePrivateBucket(): string {
+    if (!this.config.privateBucket) {
+      throw new Error('STORAGE_PRIVATE_BUCKET is not configured');
+    }
+    return this.config.privateBucket;
   }
 
   private async Put(

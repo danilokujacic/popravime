@@ -73,4 +73,22 @@ describe('EnvValidationSchema', () => {
 
     expect(result.value.DATABASE_SSL).toBe(false);
   });
+
+  it('accepts an env with no private bucket configured', () => {
+    const result = EnvValidationSchema.validate(
+      BuildBaseEnv({ STORAGE_PRIVATE_BUCKET: '' }),
+      { abortEarly: false },
+    );
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it('rejects a private bucket that is the same as the public one', () => {
+    const result = EnvValidationSchema.validate(
+      BuildBaseEnv({ STORAGE_PRIVATE_BUCKET: 'bucket' }),
+      { abortEarly: false },
+    );
+
+    expect(result.error?.message).toContain('STORAGE_PRIVATE_BUCKET');
+  });
 });

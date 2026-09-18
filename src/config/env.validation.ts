@@ -9,15 +9,12 @@ export const EnvValidationSchema = Joi.object({
     .allow('')
     .when('NODE_ENV', {
       is: 'production',
-      then: Joi.string()
-        .invalid('', '*')
-        .required()
-        .messages({
-          'any.required':
-            'CORS_ORIGIN must be set to a concrete allow-list of origins in production',
-          'any.invalid':
-            'CORS_ORIGIN must not be empty or "*" in production — set a concrete allow-list of origins',
-        }),
+      then: Joi.string().invalid('', '*').required().messages({
+        'any.required':
+          'CORS_ORIGIN must be set to a concrete allow-list of origins in production',
+        'any.invalid':
+          'CORS_ORIGIN must not be empty or "*" in production — set a concrete allow-list of origins',
+      }),
       otherwise: Joi.string().optional(),
     }),
   // Base URL of the frontend app — used to build deep links in emails (see app.config.ts, which
@@ -47,8 +44,9 @@ export const EnvValidationSchema = Joi.object({
   STORAGE_REGION: Joi.string().default('auto'),
   STORAGE_BUCKET: Joi.string().required(),
   STORAGE_PRIVATE_BUCKET: Joi.string()
+    .allow('')
     .invalid(Joi.ref('STORAGE_BUCKET'))
-    .required()
+    .default('')
     .messages({
       'any.invalid':
         'STORAGE_PRIVATE_BUCKET must be a different bucket from STORAGE_BUCKET',
@@ -124,7 +122,10 @@ export const EnvValidationSchema = Joi.object({
 
   RETENTION_INACTIVE_ACCOUNTS_DAYS: Joi.number().integer().min(1).default(60),
   RETENTION_COMPLETED_REQUESTS_DAYS: Joi.number().integer().min(1).default(730),
-  RETENTION_UNACCEPTED_REQUESTS_DAYS: Joi.number().integer().min(1).default(180),
+  RETENTION_UNACCEPTED_REQUESTS_DAYS: Joi.number()
+    .integer()
+    .min(1)
+    .default(180),
   RETENTION_INQUIRIES_DAYS: Joi.number().integer().min(1).default(365),
   RETENTION_CONTACT_MESSAGES_DAYS: Joi.number().integer().min(1).default(365),
   RETENTION_BATCH_SIZE: Joi.number().integer().min(1).default(500),

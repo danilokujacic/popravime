@@ -16,7 +16,7 @@ jest.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: (...args: unknown[]) => mockGetSignedUrl(...args) as unknown,
 }));
 
-function BuildConfig(): StorageConfig {
+function BuildConfig(overrides?: Partial<StorageConfig>): StorageConfig {
   return {
     endpoint: 'https://storage.example.com',
     region: 'auto',
@@ -27,6 +27,7 @@ function BuildConfig(): StorageConfig {
     forcePathStyle: true,
     publicUrl: 'https://cdn.example.com',
     signedUrlTtlSeconds: 900,
+    ...overrides,
   };
 }
 
@@ -153,5 +154,33 @@ describe('S3StorageService', () => {
       'abc.jpg',
     );
     expect(service.ExtractKey('private:abc.jpg')).toBeNull();
+  });
+
+  describe('without a private bucket configured', () => {
+    it('keeps "private" uploads in the public bucket and returns their public URL', async () => {
+      const service = new S3StorageService(BuildConfig({ privateBucket: '' }));
+
+      const result = await service.UploadPrivate({
+        buffer: Buffer.from('data'),
+        fileName: 'photo.jpg',
+        contentType: 'image/jpeg',
+      });
+
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({ Bucket: 'bucket', Key: result.key }),
+      );
+      expect(result.reference).toBe(`https://cdn.example.com/${result.key}`);
+    });
+
+    it('refuses to sign or delete private keys, since none can exist', async () => {
+      const service = new S3StorageService(BuildConfig({ privateBucket: '' }));
+
+      await expect(service.SignUrl('a.jpg')).rejects.toThrow(
+        'STORAGE_PRIVATE_BUCKET is not configured',
+      );
+      await expect(service.DeletePrivate('a.jpg')).rejects.toThrow(
+        'STORAGE_PRIVATE_BUCKET is not configured',
+      );
+    });
   });
 });
