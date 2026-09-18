@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { RefreshTokenStrategy } from './refresh-token.strategy';
 import { RefreshTokenDenylistService } from '../refresh-token-denylist.service';
+import { AccountRevocationService } from '../account-revocation.service';
 import { UserRole } from '../../users/users.types';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
@@ -16,11 +17,15 @@ function BuildPayload(overrides?: Partial<JwtPayload>): JwtPayload {
 }
 
 describe('RefreshTokenStrategy.validate', () => {
-  function BuildStrategy(isRevoked: boolean) {
+  function BuildStrategy(isRevoked: boolean, isAccountRevoked = false) {
     const refreshTokenDenylistService = {
       IsRevoked: jest.fn().mockResolvedValue(isRevoked),
       Revoke: jest.fn(),
     } as unknown as RefreshTokenDenylistService;
+
+    const accountRevocationService = {
+      IsRevoked: jest.fn().mockResolvedValue(isAccountRevoked),
+    } as unknown as AccountRevocationService;
 
     const strategy = new RefreshTokenStrategy(
       {
@@ -30,6 +35,7 @@ describe('RefreshTokenStrategy.validate', () => {
         refreshExpiresInSeconds: 604800,
       },
       refreshTokenDenylistService,
+      accountRevocationService,
     );
 
     return { strategy };
@@ -59,5 +65,12 @@ describe('RefreshTokenStrategy.validate', () => {
     await expect(
       strategy.validate(BuildPayload({ exp: undefined })),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+  it('rejects a token belonging to an erased account', async () => {
+    const { strategy } = BuildStrategy(false, true);
+
+    await expect(strategy.validate(BuildPayload())).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 });

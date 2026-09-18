@@ -16,4 +16,6 @@ export interface IUsersService {
   CreateOAuthUser(profile: OAuthProfile, role: UserRole): Promise<User>;
   Update(id: string, input: UpdateUserInput): Promise<User>;
   MarkEmailVerified(email: string): Promise<User>;
+  AcceptTerms(id: string): Promise<User>;
+  TouchActivity(id: string): Promise<void>;
 }

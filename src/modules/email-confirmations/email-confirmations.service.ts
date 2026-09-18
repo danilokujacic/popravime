@@ -49,7 +49,7 @@ export class EmailConfirmationsService {
 
     if (record.expiresAt.getTime() < Date.now()) {
       this.logger.warn(
-        { email: record.email },
+        { confirmationId: record.id },
         'Email confirmation attempted with an expired link',
       );
       throw new DomainConflictException(

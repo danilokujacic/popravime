@@ -3,10 +3,17 @@ import { StorageConfig } from '../../../config/storage.config';
 
 const mockSend = jest.fn().mockResolvedValue({});
 
+const mockGetSignedUrl = jest.fn().mockResolvedValue('https://signed.example');
+
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn().mockImplementation(() => ({ send: mockSend })),
   PutObjectCommand: jest.fn().mockImplementation((input) => input),
   DeleteObjectCommand: jest.fn().mockImplementation((input) => input),
+  GetObjectCommand: jest.fn().mockImplementation((input: unknown) => input),
+}));
+
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: (...args: unknown[]) => mockGetSignedUrl(...args) as unknown,
 }));
 
 function BuildConfig(): StorageConfig {
@@ -14,10 +21,12 @@ function BuildConfig(): StorageConfig {
     endpoint: 'https://storage.example.com',
     region: 'auto',
     bucket: 'bucket',
+    privateBucket: 'private-bucket',
     accessKey: 'access',
     secretKey: 'secret',
     forcePathStyle: true,
     publicUrl: 'https://cdn.example.com',
+    signedUrlTtlSeconds: 900,
   };
 }
 
@@ -76,5 +85,73 @@ describe('S3StorageService', () => {
     });
 
     expect(result.key).toMatch(/^[0-9a-f-]{36}-file$/);
+  });
+
+  it('uploads a private file to the private bucket and returns a private reference', async () => {
+    const service = new S3StorageService(BuildConfig());
+
+    const result = await service.UploadPrivate({
+      buffer: Buffer.from('data'),
+      fileName: 'photo.jpg',
+      contentType: 'image/jpeg',
+    });
+
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ Bucket: 'private-bucket', Key: result.key }),
+    );
+    expect(result.reference).toBe(`private:${result.key}`);
+  });
+
+  it('uploads a public file to the public bucket', async () => {
+    const service = new S3StorageService(BuildConfig());
+
+    const result = await service.Upload({
+      buffer: Buffer.from('data'),
+      fileName: 'photo.jpg',
+      contentType: 'image/jpeg',
+    });
+
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({ Bucket: 'bucket', Key: result.key }),
+    );
+  });
+
+  it('deletes from the bucket matching the visibility', async () => {
+    const service = new S3StorageService(BuildConfig());
+
+    await service.Delete('a.jpg');
+    await service.DeletePrivate('b.jpg');
+
+    expect(mockSend).toHaveBeenCalledWith({ Bucket: 'bucket', Key: 'a.jpg' });
+    expect(mockSend).toHaveBeenCalledWith({
+      Bucket: 'private-bucket',
+      Key: 'b.jpg',
+    });
+  });
+
+  it('signs a private key against the private bucket with the configured lifetime', async () => {
+    const service = new S3StorageService(BuildConfig());
+
+    const url = await service.SignUrl('b.jpg');
+
+    expect(url).toBe('https://signed.example');
+    expect(mockGetSignedUrl).toHaveBeenCalledWith(
+      expect.anything(),
+      { Bucket: 'private-bucket', Key: 'b.jpg' },
+      { expiresIn: 900 },
+    );
+  });
+
+  it('tells private references from public URLs', () => {
+    const service = new S3StorageService(BuildConfig());
+
+    expect(service.ExtractPrivateKey('private:abc.jpg')).toBe('abc.jpg');
+    expect(
+      service.ExtractPrivateKey('https://cdn.example.com/abc.jpg'),
+    ).toBeNull();
+    expect(service.ExtractKey('https://cdn.example.com/abc.jpg')).toBe(
+      'abc.jpg',
+    );
+    expect(service.ExtractKey('private:abc.jpg')).toBeNull();
   });
 });

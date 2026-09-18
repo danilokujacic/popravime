@@ -32,11 +32,12 @@ describe('ContactMessagesService.UpdateStatus', () => {
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
-    } as unknown as ConstructorParameters<typeof ContactMessagesService>[2];
+    } as unknown as ConstructorParameters<typeof ContactMessagesService>[3];
 
     const service = new ContactMessagesService(
       contactMessagesRepository,
       auditLogsService,
+      { termsVersion: '2026-09-18' },
       logger,
     );
 

@@ -38,6 +38,8 @@ import { PriceEstimatesModule } from './modules/price-estimates/price-estimates.
 import { ContactMessagesModule } from './modules/contact-messages/contact-messages.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { AccountDataModule } from './modules/account-data/account-data.module';
+import { RetentionModule } from './modules/retention/retention.module';
 
 @Module({
   imports: [
@@ -84,6 +86,8 @@ import { AdminModule } from './modules/admin/admin.module';
     ContactMessagesModule,
     AuditLogsModule,
     AdminModule,
+    AccountDataModule,
+    RetentionModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: DomainExceptionFilter },

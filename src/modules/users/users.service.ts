@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { UsersRepository } from './users.repository';
 import { PasswordHasher } from '../../shared/password/password-hasher';
@@ -12,12 +13,17 @@ import {
 } from './users.types';
 import { IUsersService } from './users.service.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
+import { legalConfig } from '../../config/legal.config';
+
+const ACTIVITY_RESOLUTION_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class UsersService implements IUsersService {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly passwordHasher: PasswordHasher,
+    @Inject(legalConfig.KEY)
+    private readonly legal: ConfigType<typeof legalConfig>,
   ) {}
 
   async Register(input: CreateUserInput): Promise<User> {
@@ -30,6 +36,8 @@ export class UsersService implements IUsersService {
       phone: input.phone ?? null,
       role: input.role,
       emailVerified: false,
+      termsAcceptedAt: new Date(),
+      termsVersion: this.legal.termsVersion,
     });
   }
 
@@ -88,6 +96,8 @@ export class UsersService implements IUsersService {
       // The OAuth provider already proved ownership of this email address — no confirmation
       // link needed.
       emailVerified: true,
+      termsAcceptedAt: new Date(),
+      termsVersion: this.legal.termsVersion,
     });
   }
 
@@ -114,5 +124,19 @@ export class UsersService implements IUsersService {
     }
 
     return this.usersRepository.Save(user);
+  }
+
+  async AcceptTerms(id: string): Promise<User> {
+    const user = await this.FindById(id);
+    user.termsAcceptedAt = new Date();
+    user.termsVersion = this.legal.termsVersion;
+    return this.usersRepository.Save(user);
+  }
+
+  async TouchActivity(id: string): Promise<void> {
+    await this.usersRepository.TouchActivity(
+      id,
+      new Date(Date.now() - ACTIVITY_RESOLUTION_MS),
+    );
   }
 }

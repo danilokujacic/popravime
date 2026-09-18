@@ -1,6 +1,8 @@
 import { EnvValidationSchema } from './env.validation';
 
-function BuildBaseEnv(overrides: Record<string, string> = {}): Record<string, string> {
+function BuildBaseEnv(
+  overrides: Record<string, string> = {},
+): Record<string, string> {
   return {
     DATABASE_HOST: 'localhost',
     DATABASE_USER: 'postgres',
@@ -11,6 +13,7 @@ function BuildBaseEnv(overrides: Record<string, string> = {}): Record<string, st
     REFRESH_SECRET: 'b'.repeat(16),
     STORAGE_ENDPOINT: 'https://storage.example.com',
     STORAGE_BUCKET: 'bucket',
+    STORAGE_PRIVATE_BUCKET: 'bucket-private',
     STORAGE_ACCESS_KEY: 'access',
     STORAGE_SECRET_KEY: 'secret',
     STORAGE_PUBLIC_URL: 'https://cdn.example.com',

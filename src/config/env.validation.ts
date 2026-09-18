@@ -46,6 +46,14 @@ export const EnvValidationSchema = Joi.object({
   STORAGE_ENDPOINT: Joi.string().uri().required(),
   STORAGE_REGION: Joi.string().default('auto'),
   STORAGE_BUCKET: Joi.string().required(),
+  STORAGE_PRIVATE_BUCKET: Joi.string()
+    .invalid(Joi.ref('STORAGE_BUCKET'))
+    .required()
+    .messages({
+      'any.invalid':
+        'STORAGE_PRIVATE_BUCKET must be a different bucket from STORAGE_BUCKET',
+    }),
+  STORAGE_SIGNED_URL_TTL_SECONDS: Joi.number().integer().min(60).default(3600),
   STORAGE_ACCESS_KEY: Joi.string().required(),
   STORAGE_SECRET_KEY: Joi.string().required(),
   STORAGE_FORCE_PATH_STYLE: Joi.boolean().default(true),
@@ -111,4 +119,14 @@ export const EnvValidationSchema = Joi.object({
   // How long a POST /auth/register or /auth/resend-confirmation email-confirmation link stays
   // valid. Default 24h.
   EMAIL_CONFIRMATION_TTL_SECONDS: Joi.number().default(86400),
+
+  LEGAL_TERMS_VERSION: Joi.string().default('2026-09-18'),
+
+  RETENTION_INACTIVE_ACCOUNTS_DAYS: Joi.number().integer().min(1).default(60),
+  RETENTION_COMPLETED_REQUESTS_DAYS: Joi.number().integer().min(1).default(730),
+  RETENTION_UNACCEPTED_REQUESTS_DAYS: Joi.number().integer().min(1).default(180),
+  RETENTION_INQUIRIES_DAYS: Joi.number().integer().min(1).default(365),
+  RETENTION_CONTACT_MESSAGES_DAYS: Joi.number().integer().min(1).default(365),
+  RETENTION_BATCH_SIZE: Joi.number().integer().min(1).default(500),
+  RETENTION_SCHEDULE: Joi.string().default('0 3 * * *'),
 });

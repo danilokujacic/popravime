@@ -7,5 +7,6 @@ export class UserResponseDto {
   phone: string | null;
   role: UserRole;
   locale: Locale;
+  termsAccepted: boolean;
   createdAt: Date;
 }

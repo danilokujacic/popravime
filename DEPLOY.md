@@ -30,12 +30,31 @@ only, not deployed here). Every `docker compose` command below targets the forme
 
 ## 2. Cloudflare R2 (object storage)
 
-1. Create the production bucket.
-2. Create an R2 API token scoped to that bucket (access key + secret key).
-3. Set up either the bucket's public dev URL or a custom domain for public reads, and note it as
-   `STORAGE_PUBLIC_URL`.
+Two buckets, because R2 makes public access a per-bucket setting:
+
+1. Create the **public** bucket (provider gallery images only) and set up either its public dev
+   URL or a custom domain for public reads, noted as `STORAGE_PUBLIC_URL`. Env: `STORAGE_BUCKET`.
+2. Create the **private** bucket (repair-request photos, message attachments, verification
+   documents). Leave public access **off**: no `r2.dev` URL, no custom domain. Env:
+   `STORAGE_PRIVATE_BUCKET`. The API serves these files through short-lived signed links
+   (`STORAGE_SIGNED_URL_TTL_SECONDS`, default 1 hour).
+3. Create one R2 API token with read/write access to **both** buckets (access key + secret key).
 4. Note the S3-compatible endpoint as `STORAGE_ENDPOINT` (the account-level R2 endpoint, e.g.
-   `https://<account-id>.r2.cloudflarestorage.com`).
+   `https://<account-id>.r2.cloudflarestorage.com`). Signed links are issued against this
+   endpoint, so the frontend must allow its host as an image source (`NEXT_PUBLIC_PRIVATE_FILES_ORIGIN`).
+
+### Moving uploads that already exist into the private bucket
+
+Run once, after the new backend with `STORAGE_PRIVATE_BUCKET` is deployed (old rows keep working
+from the public bucket until then):
+
+```
+pnpm storage:privatize -- --dry-run   # prints how many rows/objects it would move
+pnpm storage:privatize                # copies to the private bucket, rewrites the rows, deletes the public copy
+```
+
+It is idempotent. If it lists objects "STILL in the public bucket", delete them by hand in the R2
+dashboard. Afterwards the public bucket should contain gallery images only.
 
 ## 3. Hetzner (VM)
 

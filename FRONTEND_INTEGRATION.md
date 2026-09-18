@@ -256,8 +256,32 @@ account, that still goes through the full `/auth/register` + business-profile fl
 |---|---|---|---|
 | GET | `/users/me` | any authenticated | current user's own profile |
 | PATCH | `/users/me` | any authenticated | body: `{full_name?, phone?}` |
+| POST | `/users/me/terms-acceptance` | any authenticated | records that the caller accepted the current privacy policy / terms (`LEGAL_TERMS_VERSION`); returns the updated user |
+| GET | `/users/me/export` | any authenticated | everything held about the caller: `{profile, provider, repair_requests, messages_sent, reviews_written, direct_inquiries, notifications, exported_at}` (right of access) |
+| DELETE | `/users/me` | customer, provider_owner | erases the account, `204` with no body (right to erasure) |
 
-Response shape: `{id, email, full_name, phone, role, created_at}`. Email and role are not
+`DELETE /users/me` anonymises in place rather than removing rows: the user becomes `Deleted user`
+(email, phone, password and OAuth link cleared), open requests are cancelled, uploaded photos,
+attachments, gallery images and verification documents are deleted from storage, a provider
+profile is blanked and hidden, and notifications, matching contact-form messages and inquiry
+contact details are removed. Access and refresh tokens stop working immediately. It fails with
+`409 ACCOUNT_HAS_ACTIVE_WORK` while the caller has an `accepted`/`in_progress` request or an
+accepted offer on one, and with `403 ADMIN_ACCOUNT_NOT_ERASABLE` for admins. Both endpoints use
+the auth rate limit.
+
+Accounts with no activity for 60 days (`RETENTION_INACTIVE_ACCOUNTS_DAYS`) are erased automatically
+the same way, unless they still have accepted work in progress; admins are never purged. Activity
+means any token issue (login, silent refresh on page load, email confirmation, OAuth), recorded at
+most once a day in `users.last_active_at`; existing accounts start their 60 days at deploy time.
+
+Other records are also purged automatically on a daily schedule (`RETENTION_*` env vars, kept in line
+with the published privacy policy): closed requests after 24 months (6 months if never
+accepted), direct inquiries and contact messages after 12 months, expired email confirmations.
+
+Response shape: `{id, email, full_name, phone, role, locale, terms_accepted, created_at}`.
+`terms_accepted` is `false` until the user has accepted the current policy version (every existing
+account starts `false`, and bumping `LEGAL_TERMS_VERSION` resets everyone); the frontend must send
+such a user to an acceptance page before letting them use the app. Email and role are not
 editable via this endpoint (no endpoint changes them at all, post-registration).
 
 ## 4. Reference data (cities & categories)
@@ -372,6 +396,14 @@ enforced source of truth (`413 Payload Too Large` / `415 Unsupported Media Type`
 | `POST /repair-requests` | `photos` (up to 5 files) | 5 MB each | same as above |
 | `POST /verification-requests` | `document` | 10 MB | image types above + `application/pdf` |
 | `POST /messages` | `attachment` (optional) | 10 MB | image types above + `application/pdf` |
+
+**Private files.** Repair-request photos, message attachments and verification documents are not
+publicly readable. The API returns each one as a short-lived signed link (in `photo_urls`,
+`attachment_url` and `document_url`), valid for `STORAGE_SIGNED_URL_TTL_SECONDS` (default 1 hour)
+and only to users who may see that request, conversation or document. Never cache or store these
+URLs long-term: re-fetch the resource to get a fresh link. They point at the object-storage host
+(not the API and not `STORAGE_PUBLIC_URL`), so that host must be allowed as an image source in the
+frontend's CSP. Only provider gallery images (`image_url`) remain public and stable.
 
 The gallery-upload endpoint also accepts a `caption` form field (optional, plain text). The
 repair-request and verification-request endpoints mix file fields with regular text fields in

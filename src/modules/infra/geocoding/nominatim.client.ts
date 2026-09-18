@@ -60,7 +60,7 @@ export class NominatimClient implements IGeocodingService {
         !IsNominatimResultArray(response.data) ||
         response.data.length === 0
       ) {
-        this.logger.warn({ address }, 'Geocoding found no results');
+        this.logger.warn('Geocoding found no results');
         return null;
       }
 
@@ -69,7 +69,6 @@ export class NominatimClient implements IGeocodingService {
     } catch (error) {
       this.logger.error(
         {
-          address,
           message: error instanceof Error ? error.message : 'unknown error',
         },
         'Geocoding request failed',

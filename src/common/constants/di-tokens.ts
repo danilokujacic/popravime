@@ -3,3 +3,5 @@ export const EMAIL_SERVICE = Symbol('EMAIL_SERVICE');
 export const GEOCODING_SERVICE = Symbol('GEOCODING_SERVICE');
 
 export const EMAIL_QUEUE_NAME = 'email';
+export const RETENTION_QUEUE_NAME = 'retention';
+export const RETENTION_SCHEDULER_ID = 'retention-daily-purge';

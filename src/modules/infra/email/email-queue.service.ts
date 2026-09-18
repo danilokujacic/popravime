@@ -25,7 +25,6 @@ export class EmailQueueService {
     this.logger.info(
       {
         emailKind: job.kind,
-        to: job.payload.to,
         correlationId: job.correlationId,
       },
       'Email queued',

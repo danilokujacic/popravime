@@ -21,8 +21,10 @@ import { MessageResponseMapper } from './mappers/message-response.mapper';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { MESSAGE_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
+import { PrivateFileUrlInterceptor } from '../infra/storage/private-file-url.interceptor';
 
 @Controller('messages')
+@UseInterceptors(PrivateFileUrlInterceptor)
 export class MessagesController {
   constructor(private readonly messagesService: MessagesService) {}
 

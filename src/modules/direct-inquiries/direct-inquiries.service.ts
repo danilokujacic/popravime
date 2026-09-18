@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Transactional } from 'typeorm-transactional';
 import { DirectInquiriesRepository } from './direct-inquiries.repository';
@@ -17,6 +18,7 @@ import { PaginatedResult } from '../../common/interfaces/paginated-result.interf
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
 import { DomainValidationException } from '../../common/exceptions/validation.exception';
+import { legalConfig } from '../../config/legal.config';
 
 @Injectable()
 export class DirectInquiriesService implements IDirectInquiriesService {
@@ -25,6 +27,8 @@ export class DirectInquiriesService implements IDirectInquiriesService {
     private readonly providersService: ProvidersService,
     private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
+    @Inject(legalConfig.KEY)
+    private readonly legal: ConfigType<typeof legalConfig>,
     @InjectPinoLogger(DirectInquiriesService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -44,6 +48,8 @@ export class DirectInquiriesService implements IDirectInquiriesService {
       contactEmail: input.contactEmail ?? null,
       contactPhone: input.contactPhone ?? null,
       message: input.message,
+      termsAcceptedAt: new Date(),
+      termsVersion: this.legal.termsVersion,
     });
 
     const senderName = await this.ResolveSenderName(input);

@@ -98,7 +98,7 @@ describe('EmailConfirmationsService.Confirm', () => {
     );
     expect(repository.DeleteById).toHaveBeenCalledWith('confirmation-1');
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ email: 'ana@popravime.me' }),
+      expect.objectContaining({ confirmationId: 'confirmation-1' }),
       expect.any(String),
     );
   });

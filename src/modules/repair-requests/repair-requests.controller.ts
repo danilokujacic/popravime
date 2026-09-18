@@ -34,6 +34,7 @@ import type { AuthenticatedUser } from '../../common/interfaces/authenticated-re
 import { UserRole } from '../users/users.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { REPAIR_REQUEST_CREATE_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
+import { PrivateFileUrlInterceptor } from '../infra/storage/private-file-url.interceptor';
 
 const MAX_PHOTOS = 5;
 
@@ -43,6 +44,7 @@ const UNMODERATED_STATUSES: RequestStatus[] = [
 ];
 
 @Controller('repair-requests')
+@UseInterceptors(PrivateFileUrlInterceptor)
 export class RepairRequestsController {
   constructor(
     private readonly repairRequestsService: RepairRequestsService,

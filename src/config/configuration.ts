@@ -10,6 +10,8 @@ import { geocodingConfig } from './geocoding.config';
 import { oauthConfig } from './oauth.config';
 import { verificationConfig } from './verification.config';
 import { emailConfirmationConfig } from './email-confirmation.config';
+import { retentionConfig } from './retention.config';
+import { legalConfig } from './legal.config';
 
 export const ConfigNamespaces = [
   appConfig,
@@ -24,4 +26,6 @@ export const ConfigNamespaces = [
   oauthConfig,
   verificationConfig,
   emailConfirmationConfig,
+  retentionConfig,
+  legalConfig,
 ];

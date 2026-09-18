@@ -62,6 +62,22 @@ export class User {
   })
   locale: Locale;
 
+  @Column({ name: 'terms_accepted_at', type: 'timestamptz', nullable: true })
+  termsAcceptedAt: Date | null;
+
+  @Column({ name: 'terms_version', type: 'text', nullable: true })
+  termsVersion: string | null;
+
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt: Date | null;
+
+  @Column({
+    name: 'last_active_at',
+    type: 'timestamptz',
+    default: () => 'now()',
+  })
+  lastActiveAt: Date;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

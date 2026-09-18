@@ -96,8 +96,16 @@ describe('MessagesService.Create', () => {
 
     const storageService = {
       Upload: jest.fn(),
+      UploadPrivate: jest.fn().mockResolvedValue({
+        key: 'k.pdf',
+        reference: 'private:k.pdf',
+      }),
       Delete: jest.fn(),
+      DeletePrivate: jest.fn(),
       GetUrl: jest.fn(),
+      ExtractKey: jest.fn(),
+      ExtractPrivateKey: jest.fn(),
+      SignUrl: jest.fn(),
     } as unknown as StorageService;
 
     const logger = {
@@ -117,7 +125,12 @@ describe('MessagesService.Create', () => {
       logger,
     );
 
-    return { service, messagesRepository, notificationsService };
+    return {
+      service,
+      messagesRepository,
+      notificationsService,
+      storageService,
+    };
   }
 
   it('rejects when both request_id and inquiry_id are provided', async () => {
@@ -158,6 +171,25 @@ describe('MessagesService.Create', () => {
     );
     expect(notificationsService.Notify).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'provider-owner-1' }),
+    );
+  });
+
+  it('stores an attachment privately and keeps only its private reference', async () => {
+    const { service, messagesRepository, storageService } = BuildService();
+
+    await service.Create('customer-1', {
+      requestId: 'request-1',
+      body: 'see attached',
+      attachment: {
+        buffer: Buffer.from('x'),
+        fileName: 'a.pdf',
+        contentType: 'application/pdf',
+      },
+    });
+
+    expect(storageService.UploadPrivate).toHaveBeenCalled();
+    expect(messagesRepository.Create).toHaveBeenCalledWith(
+      expect.objectContaining({ attachmentUrl: 'private:k.pdf' }),
     );
   });
 

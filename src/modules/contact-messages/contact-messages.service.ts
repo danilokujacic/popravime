@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { ContactMessagesRepository } from './contact-messages.repository';
 import { ContactMessage } from './entities/contact-message.entity';
@@ -11,12 +12,15 @@ import { IContactMessagesService } from './contact-messages.service.interface';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
+import { legalConfig } from '../../config/legal.config';
 
 @Injectable()
 export class ContactMessagesService implements IContactMessagesService {
   constructor(
     private readonly contactMessagesRepository: ContactMessagesRepository,
     private readonly auditLogsService: AuditLogsService,
+    @Inject(legalConfig.KEY)
+    private readonly legal: ConfigType<typeof legalConfig>,
     @InjectPinoLogger(ContactMessagesService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -27,6 +31,8 @@ export class ContactMessagesService implements IContactMessagesService {
       email: input.email,
       subject: input.subject,
       message: input.message,
+      termsAcceptedAt: new Date(),
+      termsVersion: this.legal.termsVersion,
     });
 
     this.logger.info(

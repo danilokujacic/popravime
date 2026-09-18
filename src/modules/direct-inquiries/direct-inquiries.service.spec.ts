@@ -53,13 +53,14 @@ function BuildService(inquiry: DirectInquiry) {
   const logger = {
     info: jest.fn(),
     warn: jest.fn(),
-  } as unknown as ConstructorParameters<typeof DirectInquiriesService>[4];
+  } as unknown as ConstructorParameters<typeof DirectInquiriesService>[5];
 
   const service = new DirectInquiriesService(
     directInquiriesRepository,
     providersService,
     usersService,
     notificationsService,
+    { termsVersion: '2026-09-18' },
     logger,
   );
 

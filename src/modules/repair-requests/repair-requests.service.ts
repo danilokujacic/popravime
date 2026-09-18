@@ -89,7 +89,7 @@ export class RepairRequestsService implements IRepairRequestsService {
   ): Promise<string[]> {
     const uploaded = await Promise.all(
       photos.map((photo) =>
-        this.storageService.Upload({
+        this.storageService.UploadPrivate({
           buffer: photo.buffer,
           fileName: photo.fileName,
           contentType: photo.contentType,
@@ -97,7 +97,7 @@ export class RepairRequestsService implements IRepairRequestsService {
       ),
     );
 
-    return uploaded.map((result) => result.url);
+    return uploaded.map((result) => result.reference);
   }
 
   async FindById(id: string): Promise<RepairRequest> {

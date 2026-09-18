@@ -22,6 +22,7 @@ function BuildService(overrides?: {
     FindOAuthMatch: jest.fn(),
     CreateOAuthUser: jest.fn(),
     MarkEmailVerified: jest.fn(),
+    TouchActivity: jest.fn().mockResolvedValue(undefined),
     ...overrides?.usersService,
   } as unknown as UsersService;
 
@@ -217,7 +218,7 @@ describe('AuthService', () => {
     });
 
     it('issues a token pair when credentials are valid and the email is verified', async () => {
-      const { service } = BuildService({
+      const { service, usersService } = BuildService({
         usersService: {
           FindCredentials: jest.fn().mockResolvedValue({
             id: 'user-1',
@@ -239,6 +240,7 @@ describe('AuthService', () => {
         accessToken: 'signed-token',
         refreshToken: 'signed-token',
       });
+      expect(usersService.TouchActivity).toHaveBeenCalledWith('user-1');
     });
   });
 

@@ -53,6 +53,12 @@ export class DirectInquiry {
   })
   status: InquiryStatus;
 
+  @Column({ name: 'terms_accepted_at', type: 'timestamptz', nullable: true })
+  termsAcceptedAt: Date | null;
+
+  @Column({ name: 'terms_version', type: 'text', nullable: true })
+  termsVersion: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

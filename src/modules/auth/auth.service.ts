@@ -51,7 +51,7 @@ export class AuthService implements IAuthService {
     const existing = await this.usersService.FindByEmail(input.email);
     if (existing) {
       this.logger.warn(
-        { email: input.email },
+        { existingUserId: existing.id },
         'Registration attempted with existing email',
       );
       throw new DomainConflictException(
@@ -71,10 +71,7 @@ export class AuthService implements IAuthService {
   async Login(input: LoginInput): Promise<TokenPair> {
     const credentials = await this.usersService.FindCredentials(input.email);
     if (!credentials) {
-      this.logger.warn(
-        { email: input.email },
-        'Login attempted for unknown email',
-      );
+      this.logger.warn('Login attempted for unknown email');
       throw new DomainUnauthorizedException(
         'INVALID_CREDENTIALS',
         'Invalid email or password',
@@ -165,7 +162,8 @@ export class AuthService implements IAuthService {
         locale: user.locale,
         confirmUrl,
       },
-      correlationId: this.cls.get<string>(CORRELATION_ID_CLS_KEY) ?? randomUUID(),
+      correlationId:
+        this.cls.get<string>(CORRELATION_ID_CLS_KEY) ?? randomUUID(),
     });
   }
 
@@ -214,6 +212,8 @@ export class AuthService implements IAuthService {
     email: string,
     role: UserRole,
   ): Promise<TokenPair> {
+    await this.usersService.TouchActivity(userId);
+
     const payload: JwtPayload = { sub: userId, email, role, jti: randomUUID() };
 
     const [accessToken, refreshToken] = await Promise.all([

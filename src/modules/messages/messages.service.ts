@@ -132,8 +132,8 @@ export class MessagesService implements IMessagesService {
     if (!attachment) {
       return null;
     }
-    const uploaded = await this.storageService.Upload(attachment);
-    return uploaded.url;
+    const uploaded = await this.storageService.UploadPrivate(attachment);
+    return uploaded.reference;
   }
 
   private async ResolveParticipants(ref: ConversationRef): Promise<string[]> {

@@ -43,6 +43,7 @@ describe('Auth flow integration', () => {
     process.env.REFRESH_SECRET = 'integration-test-refresh-secret';
     process.env.STORAGE_ENDPOINT = 'http://localhost:9000';
     process.env.STORAGE_BUCKET = 'integration-test';
+    process.env.STORAGE_PRIVATE_BUCKET = 'integration-test-private';
     process.env.STORAGE_ACCESS_KEY = 'integration-test';
     process.env.STORAGE_SECRET_KEY = 'integration-test';
     process.env.STORAGE_PUBLIC_URL = 'http://localhost:9000/integration-test';

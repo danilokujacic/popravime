@@ -33,6 +33,8 @@ function BuildService(overrides?: {
     FindByOAuthIdentity: jest.fn().mockResolvedValue(null),
     FindByEmail: jest.fn().mockResolvedValue(null),
     Save: jest.fn().mockImplementation((user: User) => user),
+    FindById: jest.fn().mockResolvedValue(BuildUser()),
+    TouchActivity: jest.fn().mockResolvedValue(undefined),
     Create: jest
       .fn()
       .mockImplementation(
@@ -45,7 +47,9 @@ function BuildService(overrides?: {
     Hash: jest.fn().mockResolvedValue('random-hash'),
   } as unknown as PasswordHasher;
 
-  const service = new UsersService(usersRepository, passwordHasher);
+  const service = new UsersService(usersRepository, passwordHasher, {
+    termsVersion: '2026-09-18',
+  });
 
   return { service, usersRepository, passwordHasher };
 }
@@ -134,5 +138,55 @@ describe('UsersService.CreateOAuthUser', () => {
       }),
     );
     expect(result.email).toBe('ana@example.com');
+  });
+});
+
+describe('UsersService terms and activity', () => {
+  it('stamps the current terms version when a user registers', async () => {
+    const { service, usersRepository } = BuildService();
+
+    await service.Register({
+      email: 'ana@example.com',
+      password: 'password123',
+      fullName: 'Ana Petrović',
+      role: UserRole.Customer,
+    });
+
+    expect(usersRepository.Create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        termsVersion: '2026-09-18',
+        termsAcceptedAt: expect.any(Date) as Date,
+      }),
+    );
+  });
+
+  it('records acceptance of the current terms version', async () => {
+    const { service, usersRepository } = BuildService({
+      usersRepository: {
+        FindById: jest
+          .fn()
+          .mockResolvedValue(BuildUser({ termsVersion: null })),
+      },
+    });
+
+    const user = await service.AcceptTerms('user-1');
+
+    expect(user.termsVersion).toBe('2026-09-18');
+    expect(user.termsAcceptedAt).toBeInstanceOf(Date);
+    expect(usersRepository.Save).toHaveBeenCalled();
+  });
+
+  it('only refreshes the activity timestamp when it is older than a day', async () => {
+    const { service, usersRepository } = BuildService();
+    const before = Date.now();
+
+    await service.TouchActivity('user-1');
+
+    const [id, staleBefore] = (usersRepository.TouchActivity as jest.Mock).mock
+      .calls[0] as [string, Date];
+    expect(id).toBe('user-1');
+    expect(before - staleBefore.getTime()).toBeGreaterThanOrEqual(
+      24 * 60 * 60 * 1000 - 5,
+    );
   });
 });

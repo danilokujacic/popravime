@@ -25,9 +25,11 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { UserRole } from '../users/users.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
+import { PrivateFileUrlInterceptor } from '../infra/storage/private-file-url.interceptor';
 
 @UseGuards(RolesGuard)
 @Controller('verification-requests')
+@UseInterceptors(PrivateFileUrlInterceptor)
 export class VerificationRequestsController {
   constructor(
     private readonly verificationRequestsService: VerificationRequestsService,

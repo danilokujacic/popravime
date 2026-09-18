@@ -29,7 +29,6 @@ describe('EmailQueueService', () => {
     expect(logger.info).toHaveBeenCalledWith(
       {
         emailKind: 'welcome',
-        to: 'user@popravime.me',
         correlationId: 'correlation-1',
       },
       'Email queued',

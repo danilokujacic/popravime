@@ -45,11 +45,11 @@ export class VerificationRequestsService implements IVerificationRequestsService
     this.EnsureProviderOwnership(provider.ownerUserId, providerOwnerId);
     await this.EnsureNoPendingRequest(input.providerId);
 
-    const uploaded = await this.storageService.Upload(input.document);
+    const uploaded = await this.storageService.UploadPrivate(input.document);
 
     const request = await this.verificationRequestsRepository.Create({
       providerId: input.providerId,
-      documentUrl: uploaded.url,
+      documentUrl: uploaded.reference,
       aprNumber: input.aprNumber,
     });
 

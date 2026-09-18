@@ -44,7 +44,12 @@ function BuildService(request: RepairRequest) {
     TryReopen: jest.fn().mockResolvedValue(true),
   } as unknown as RepairRequestsRepository;
 
-  const storageService = { Upload: jest.fn() } as unknown as StorageService;
+  const storageService = {
+    UploadPrivate: jest.fn().mockResolvedValue({
+      key: 'k.jpg',
+      reference: 'private:k.jpg',
+    }),
+  } as unknown as StorageService;
   const usersService = {
     FindById: jest.fn().mockResolvedValue({
       id: 'customer-1',
@@ -226,6 +231,29 @@ describe('RepairRequestsService.Create', () => {
 
     expect(repairRequestsRepository.Create).toHaveBeenCalledWith(
       expect.objectContaining({ customerId: 'customer-1' }),
+    );
+  });
+
+  it('stores photos privately and keeps only their private references', async () => {
+    const { service, repairRequestsRepository } = BuildService(BuildRequest());
+
+    await service.Create({
+      customerId: 'customer-1',
+      categoryId: 'category-1',
+      description: 'The screen is cracked and unresponsive',
+      cityId: 'city-1',
+      urgency: Urgency.Standard,
+      photos: [
+        {
+          buffer: Buffer.from('x'),
+          fileName: 'a.jpg',
+          contentType: 'image/jpeg',
+        },
+      ],
+    });
+
+    expect(repairRequestsRepository.Create).toHaveBeenCalledWith(
+      expect.objectContaining({ photoUrls: ['private:k.jpg'] }),
     );
   });
 });
@@ -416,8 +444,7 @@ describe('RepairRequestsService.AcceptOffer', () => {
       customerId: 'someone-else',
       status: RequestStatus.OffersReceived,
     });
-    const { service, repairRequestsRepository, logger } =
-      BuildService(request);
+    const { service, repairRequestsRepository, logger } = BuildService(request);
 
     await expect(
       service.AcceptOffer('request-1', 'offer-1', 'customer-1'),

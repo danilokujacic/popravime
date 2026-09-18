@@ -4,18 +4,24 @@ export interface StorageConfig {
   endpoint: string;
   region: string;
   bucket: string;
+  privateBucket: string;
   accessKey: string;
   secretKey: string;
   forcePathStyle: boolean;
   publicUrl: string;
+  signedUrlTtlSeconds: number;
 }
 
 export const storageConfig = registerAs('storage', (): StorageConfig => ({
   endpoint: process.env.STORAGE_ENDPOINT ?? '',
   region: process.env.STORAGE_REGION ?? 'auto',
   bucket: process.env.STORAGE_BUCKET ?? '',
+  privateBucket: process.env.STORAGE_PRIVATE_BUCKET ?? '',
   accessKey: process.env.STORAGE_ACCESS_KEY ?? '',
   secretKey: process.env.STORAGE_SECRET_KEY ?? '',
   forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE !== 'false',
   publicUrl: process.env.STORAGE_PUBLIC_URL ?? '',
+  signedUrlTtlSeconds: Number(
+    process.env.STORAGE_SIGNED_URL_TTL_SECONDS ?? 3600,
+  ),
 }));

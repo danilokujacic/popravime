@@ -24,10 +24,12 @@
     "migration:revert": "npm run typeorm -- migration:revert",
     "migration:generate": "npm run typeorm -- migration:generate",
     "seed:run": "ts-node -r dotenv/config src/database/seeds/seed-runner.ts",
+    "storage:privatize": "ts-node -r dotenv/config src/database/scripts/privatize-uploads.runner.ts",
     "seed:categories:additional": "ts-node -r dotenv/config src/database/seeds/additional-categories.seed-runner.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1115.0",
+    "@aws-sdk/s3-request-presigner": "^3.1134.0",
     "@keyv/redis": "^5.1.6",
     "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/axios": "^4.0.1",

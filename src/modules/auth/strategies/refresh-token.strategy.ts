@@ -6,6 +6,7 @@ import { jwtConfig } from '../../../config/jwt.config';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 import { RefreshTokenSession } from '../interfaces/refresh-token-session.interface';
 import { RefreshTokenDenylistService } from '../refresh-token-denylist.service';
+import { AccountRevocationService } from '../account-revocation.service';
 
 @Injectable()
 export class RefreshTokenStrategy extends PassportStrategy(
@@ -16,6 +17,7 @@ export class RefreshTokenStrategy extends PassportStrategy(
     @Inject(jwtConfig.KEY)
     config: ConfigType<typeof jwtConfig>,
     private readonly refreshTokenDenylistService: RefreshTokenDenylistService,
+    private readonly accountRevocationService: AccountRevocationService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromBodyField('refresh_token'),
@@ -30,6 +32,13 @@ export class RefreshTokenStrategy extends PassportStrategy(
     );
     if (isRevoked) {
       throw new UnauthorizedException('Refresh token has been revoked');
+    }
+
+    const isAccountRevoked = await this.accountRevocationService.IsRevoked(
+      payload.sub,
+    );
+    if (isAccountRevoked) {
+      throw new UnauthorizedException('Account no longer exists');
     }
 
     return {

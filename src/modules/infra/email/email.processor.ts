@@ -111,7 +111,7 @@ export class EmailProcessor extends WorkerHost {
     const attempt = job.attemptsMade + 1;
 
     this.logger.info(
-      { emailKind, to: content.to, attempt, correlationId },
+      { emailKind, attempt, correlationId },
       'Processing queued email',
     );
 
@@ -120,7 +120,6 @@ export class EmailProcessor extends WorkerHost {
       this.logger.info(
         {
           emailKind,
-          to: content.to,
           accepted: result.accepted,
           rejected: result.rejected,
           messageId: result.messageId,
@@ -132,7 +131,6 @@ export class EmailProcessor extends WorkerHost {
       this.logger.error(
         {
           emailKind,
-          to: content.to,
           attempt,
           correlationId,
           ...ExtractSmtpErrorDetails(error),
@@ -157,7 +155,6 @@ export class EmailProcessor extends WorkerHost {
     this.logger.error(
       {
         emailKind: job.data.kind,
-        to: job.data.payload.to,
         correlationId: job.data.correlationId,
         attemptsMade: job.attemptsMade,
         ...ExtractSmtpErrorDetails(error),

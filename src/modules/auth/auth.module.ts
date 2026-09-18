@@ -12,6 +12,7 @@ import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { FacebookStrategy } from './strategies/facebook.strategy';
 import { RefreshTokenDenylistService } from './refresh-token-denylist.service';
+import { AccountRevocationService } from './account-revocation.service';
 
 @Module({
   imports: [
@@ -30,7 +31,8 @@ import { RefreshTokenDenylistService } from './refresh-token-denylist.service';
     GoogleStrategy,
     FacebookStrategy,
     RefreshTokenDenylistService,
+    AccountRevocationService,
   ],
-  exports: [AuthService],
+  exports: [AuthService, AccountRevocationService],
 })
 export class AuthModule {}

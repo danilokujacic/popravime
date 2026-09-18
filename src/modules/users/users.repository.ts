@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import {
   IsQueryFailedError,
@@ -73,5 +73,12 @@ export class UsersRepository {
       }
       throw error;
     }
+  }
+
+  async TouchActivity(id: string, staleBefore: Date): Promise<void> {
+    await this.repository.update(
+      { id, lastActiveAt: LessThan(staleBefore) },
+      { lastActiveAt: new Date() },
+    );
   }
 }
