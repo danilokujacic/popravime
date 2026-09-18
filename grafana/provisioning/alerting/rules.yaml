@@ -178,3 +178,84 @@ groups:
                 - evaluator:
                     type: gt
                     params: [20]
+
+  - orgId: 1
+    name: Email alerts
+    folder: Popravime Alerts
+    interval: 1m
+    rules:
+      - uid: popravime-email-volume-spike
+        title: Outbound email spike
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'More than 40 emails sent by the API in the last 10 minutes — possible spam/abuse, check Brevo and the API logs'
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 900
+              to: 0
+            model:
+              refId: A
+              queryType: range
+              expr: sum(count_over_time({job="popravime-api"} |= "Email sent" [10m]))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [40]
+
+      - uid: popravime-email-limits-hit
+        title: Email limits are being hit
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'The per-recipient or per-address email limits dropped more than 5 emails in 10 minutes — someone may be hammering register/resend or a provider inbox'
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 900
+              to: 0
+            model:
+              refId: A
+              queryType: range
+              expr: sum(count_over_time({job="popravime-api"} |~ "Email cooldown exceeded|Confirmation email limit reached" [10m]))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [5]

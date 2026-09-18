@@ -756,3 +756,27 @@ status changes another party made) has to be **polled** by the frontend:
   server-side (uploaded directly to S3-compatible storage, then the DB row is written). Build
   upload UI with a loading state; there's no background-upload/progress-webhook mechanism.
 - **No bulk/batch endpoints anywhere** — every write is one resource at a time.
+
+
+## 14. Provider approval, admin review, and abuse limits
+
+**Provider approval.** `providers.approved` (default `false`; existing providers were grandfathered
+to `true` by the migration). Only approved providers appear in `GET /providers`, category counts and
+public profile lookups, receive new-request notifications, or can send offers (`403
+PROVIDER_NOT_VERIFIED`). The provider's own responses (`/providers/me`, create, update) include
+`approved`. This is separate from `verification_status` (document verification): a provider must be
+approved, and also verified when `VERIFICATION_REQUIRED=true`.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/admin/providers` | admin | paginated; `approved=true|false` filters; each item includes the owner's name, email and phone |
+| PATCH | `/admin/providers/:id/approval` | admin | body `{approved: boolean}`; audit-logged (`provider.approved` / `provider.approval_revoked`) |
+
+**Real client IP.** The frontend's server (its `/api/auth/*` routes) calls the API from its own IP.
+It sends `X-BFF-Secret` (= `BFF_SHARED_SECRET`) and `X-Client-IP` (the end user's IP); when the
+secret matches, that IP is used for rate limits and acceptance records. Without the secret the
+headers are ignored. Set the same secret as `BACKEND_SHARED_SECRET` on the frontend.
+
+**Confirmation emails.** At most `THROTTLE_CONFIRMATION_EMAIL_LIMIT` (3) per address per hour, over
+and above the per-IP limits; further requests are dropped silently. `POST
+/auth/resend-confirmation` returns `204` for unknown and already-confirmed addresses too.
