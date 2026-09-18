@@ -119,6 +119,8 @@ export const EnvValidationSchema = Joi.object({
   // valid. Default 24h.
   EMAIL_CONFIRMATION_TTL_SECONDS: Joi.number().default(86400),
 
+  BFF_SHARED_SECRET: Joi.string().min(16).allow('').default(''),
+
   LEGAL_TERMS_VERSION: Joi.string().default('2026-09-18'),
   LEGAL_TERMS_HASH: Joi.string()
     .pattern(/^[a-f0-9]{64}$/)

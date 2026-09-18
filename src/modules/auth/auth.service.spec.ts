@@ -1,6 +1,7 @@
 import type { ClsService } from 'nestjs-cls';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
+import { EmailCooldownService } from '../infra/email/email-cooldown.service';
 import { EmailConfirmationsService } from '../email-confirmations/email-confirmations.service';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { OAuthProvider, UserRole } from '../users/users.types';
@@ -47,11 +48,15 @@ function BuildService(overrides?: {
     Enqueue: jest.fn().mockResolvedValue(undefined),
   } as unknown as ConstructorParameters<typeof AuthService>[4];
 
+  const emailCooldownService = {
+    ShouldSendConfirmation: jest.fn().mockResolvedValue(true),
+  } as unknown as EmailCooldownService;
+
   const refreshTokenDenylistService = {
     Revoke: jest.fn().mockResolvedValue(undefined),
     IsRevoked: jest.fn().mockResolvedValue(false),
     ...overrides?.refreshTokenDenylistService,
-  } as unknown as ConstructorParameters<typeof AuthService>[5];
+  } as unknown as ConstructorParameters<typeof AuthService>[6];
 
   const config = {
     accessSecret: 'access-secret',
@@ -67,12 +72,12 @@ function BuildService(overrides?: {
 
   const app = {
     frontendUrl: 'http://localhost:3000',
-  } as unknown as ConstructorParameters<typeof AuthService>[8];
+  } as unknown as ConstructorParameters<typeof AuthService>[9];
 
   const logger = {
     warn: jest.fn(),
     info: jest.fn(),
-  } as unknown as ConstructorParameters<typeof AuthService>[9];
+  } as unknown as ConstructorParameters<typeof AuthService>[10];
 
   const service = new AuthService(
     usersService,
@@ -80,6 +85,7 @@ function BuildService(overrides?: {
     passwordHasher,
     jwtService,
     emailQueueService,
+    emailCooldownService,
     refreshTokenDenylistService,
     cls,
     config,
@@ -93,6 +99,7 @@ function BuildService(overrides?: {
     emailConfirmationsService,
     passwordHasher,
     emailQueueService,
+    emailCooldownService,
     refreshTokenDenylistService,
     jwtService,
     logger,
@@ -349,22 +356,23 @@ describe('AuthService', () => {
   });
 
   describe('ResendConfirmation', () => {
-    it('rejects an unknown email', async () => {
-      const { service, logger } = BuildService({
+    it('does nothing, and reveals nothing, for an unknown email', async () => {
+      const { service, emailQueueService, logger } = BuildService({
         usersService: { FindByEmail: jest.fn().mockResolvedValue(null) },
       });
 
       await expect(
         service.ResendConfirmation('unknown@popravime.me'),
-      ).rejects.toBeInstanceOf(DomainNotFoundException);
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ email: 'unknown@popravime.me' }),
-        expect.any(String),
-      );
+      ).resolves.toBeUndefined();
+
+      expect(emailQueueService.Enqueue).not.toHaveBeenCalled();
+      expect(
+        JSON.stringify((logger.info as jest.Mock).mock.calls),
+      ).not.toContain('unknown@popravime.me');
     });
 
-    it('rejects an already-verified email', async () => {
-      const { service, logger } = BuildService({
+    it('does nothing for an already-verified email', async () => {
+      const { service, emailQueueService } = BuildService({
         usersService: {
           FindByEmail: jest.fn().mockResolvedValue({
             id: 'user-1',
@@ -377,11 +385,9 @@ describe('AuthService', () => {
 
       await expect(
         service.ResendConfirmation('ana@popravime.me'),
-      ).rejects.toBeInstanceOf(DomainConflictException);
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-1' }),
-        expect.any(String),
-      );
+      ).resolves.toBeUndefined();
+
+      expect(emailQueueService.Enqueue).not.toHaveBeenCalled();
     });
 
     it('sends a fresh confirmation link for an unverified account', async () => {
@@ -405,6 +411,32 @@ describe('AuthService', () => {
       expect(emailQueueService.Enqueue).toHaveBeenCalledWith(
         expect.objectContaining({ kind: 'email-confirmation' }),
       );
+    });
+
+    it('stops sending once the per-address limit is reached, without touching the existing link', async () => {
+      const {
+        service,
+        emailConfirmationsService,
+        emailQueueService,
+        emailCooldownService,
+      } = BuildService({
+        usersService: {
+          FindByEmail: jest.fn().mockResolvedValue({
+            id: 'user-1',
+            email: 'ana@popravime.me',
+            fullName: 'Ana Petrović',
+            emailVerified: false,
+          }),
+        },
+      });
+      (
+        emailCooldownService.ShouldSendConfirmation as jest.Mock
+      ).mockResolvedValue(false);
+
+      await service.ResendConfirmation('ana@popravime.me');
+
+      expect(emailConfirmationsService.Create).not.toHaveBeenCalled();
+      expect(emailQueueService.Enqueue).not.toHaveBeenCalled();
     });
   });
 

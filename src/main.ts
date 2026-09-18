@@ -12,6 +12,8 @@ import { appConfig } from './config/app.config';
 import { ValidationFieldsException } from './common/exceptions/validation-fields.exception';
 import { BuildValidationFields } from './common/validation/build-validation-fields';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
+import { BuildClientIpMiddleware } from './common/middleware/client-ip.middleware';
+import { clientIpConfig } from './config/client-ip.config';
 import { CORRELATION_ID_HEADER } from './common/constants/correlation.constants';
 
 async function Bootstrap(): Promise<void> {
@@ -30,6 +32,12 @@ async function Bootstrap(): Promise<void> {
   // only wires up once `init()` runs, i.e. inside `app.listen()` below) so both reuse this same
   // `req.id` instead of each generating their own — see CorrelationIdMiddleware.
   app.use(CorrelationIdMiddleware);
+  app.use(
+    BuildClientIpMiddleware(
+      app.get<ConfigType<typeof clientIpConfig>>(clientIpConfig.KEY)
+        .bffSharedSecret,
+    ),
+  );
   app.use(helmet());
   app.use(compression());
   app.enableCors({

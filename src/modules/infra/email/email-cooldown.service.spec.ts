@@ -44,3 +44,38 @@ describe('EmailCooldownService.ShouldSend', () => {
     );
   });
 });
+
+describe('EmailCooldownService.ShouldSendConfirmation', () => {
+  function BuildService(totalHits: number) {
+    const storage = {
+      increment: jest.fn().mockResolvedValue({ totalHits }),
+    } as unknown as ThrottlerStorage;
+    const logger = {
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof EmailCooldownService>[1];
+    return { service: new EmailCooldownService(storage, logger), storage };
+  }
+
+  it('allows the first few confirmation emails to an address', async () => {
+    const { service } = BuildService(3);
+
+    await expect(
+      service.ShouldSendConfirmation('Ana@Popravime.me'),
+    ).resolves.toBe(true);
+  });
+
+  it('blocks once the address has had its limit, keyed case-insensitively', async () => {
+    const { service, storage } = BuildService(4);
+
+    await expect(
+      service.ShouldSendConfirmation('Ana@Popravime.me'),
+    ).resolves.toBe(false);
+    expect(storage.increment).toHaveBeenCalledWith(
+      'ana@popravime.me',
+      expect.any(Number),
+      3,
+      expect.any(Number),
+      'confirmation-email-cooldown',
+    );
+  });
+});

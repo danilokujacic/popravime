@@ -12,6 +12,7 @@ import { verificationConfig } from './verification.config';
 import { emailConfirmationConfig } from './email-confirmation.config';
 import { retentionConfig } from './retention.config';
 import { legalConfig } from './legal.config';
+import { clientIpConfig } from './client-ip.config';
 
 export const ConfigNamespaces = [
   appConfig,
@@ -28,4 +29,5 @@ export const ConfigNamespaces = [
   emailConfirmationConfig,
   retentionConfig,
   legalConfig,
+  clientIpConfig,
 ];

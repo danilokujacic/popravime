@@ -12,7 +12,7 @@ export function BuildTermsEvidence(
   return {
     version,
     documentHash,
-    ipAddress: request.ip ?? null,
+    ipAddress: request.clientIp ?? request.ip ?? null,
     userAgent: userAgent ? userAgent.slice(0, USER_AGENT_MAX_LENGTH) : null,
   };
 }

@@ -27,6 +27,7 @@ import { DomainUnauthorizedException } from '../../common/exceptions/unauthorize
 import { DomainForbiddenException } from '../../common/exceptions/forbidden.exception';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { EmailQueueService } from '../infra/email/email-queue.service';
+import { EmailCooldownService } from '../infra/email/email-cooldown.service';
 import { RefreshTokenDenylistService } from './refresh-token-denylist.service';
 import { CORRELATION_ID_CLS_KEY } from '../../common/constants/correlation.constants';
 
@@ -42,6 +43,7 @@ export class AuthService implements IAuthService {
     private readonly passwordHasher: PasswordHasher,
     private readonly jwtService: JwtService,
     private readonly emailQueueService: EmailQueueService,
+    private readonly emailCooldownService: EmailCooldownService,
     private readonly refreshTokenDenylistService: RefreshTokenDenylistService,
     private readonly cls: ClsService,
     @Inject(jwtConfig.KEY)
@@ -138,25 +140,12 @@ export class AuthService implements IAuthService {
 
   async ResendConfirmation(email: string): Promise<void> {
     const user = await this.usersService.FindByEmail(email);
-    if (!user) {
-      this.logger.warn(
-        { email },
-        'Confirmation resend requested for unknown email',
+    if (!user || user.emailVerified) {
+      this.logger.info(
+        { known: !!user },
+        'Confirmation resend ignored: nothing to confirm',
       );
-      throw new DomainNotFoundException(
-        'USER_NOT_FOUND',
-        'No account with that email',
-      );
-    }
-    if (user.emailVerified) {
-      this.logger.warn(
-        { userId: user.id },
-        'Confirmation resend requested for an already-verified email',
-      );
-      throw new DomainConflictException(
-        'EMAIL_ALREADY_VERIFIED',
-        'This email is already confirmed',
-      );
+      return;
     }
 
     await this.SendConfirmationEmail(user);
@@ -164,6 +153,17 @@ export class AuthService implements IAuthService {
   }
 
   private async SendConfirmationEmail(user: User): Promise<void> {
+    const mayEmail = await this.emailCooldownService.ShouldSendConfirmation(
+      user.email,
+    );
+    if (!mayEmail) {
+      this.logger.warn(
+        { userId: user.id },
+        'Confirmation email limit reached for this address',
+      );
+      return;
+    }
+
     const { slug } = await this.emailConfirmationsService.Create(user.email);
     const confirmUrl = `${this.app.frontendUrl}/confirm-email/${slug}`;
 

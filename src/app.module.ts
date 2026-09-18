@@ -4,8 +4,8 @@ import { LoggerModule } from 'nestjs-pino';
 import { ClsModule } from 'nestjs-cls';
 import type { ConfigType } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { ClientIpThrottlerGuard } from './common/guards/client-ip-throttler.guard';
 import { TermsAcceptanceGuard } from './modules/users/guards/terms-acceptance.guard';
 import { ConfigNamespaces } from './config/configuration';
 import { EnvValidationSchema } from './config/env.validation';
@@ -93,7 +93,7 @@ import { RetentionModule } from './modules/retention/retention.module';
   providers: [
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: CaseTransformInterceptor },
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: ClientIpThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TermsAcceptanceGuard },
   ],
