@@ -23,7 +23,8 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "migration:generate": "npm run typeorm -- migration:generate",
-    "seed:run": "ts-node -r dotenv/config src/database/seeds/seed-runner.ts"
+    "seed:run": "ts-node -r dotenv/config src/database/seeds/seed-runner.ts",
+    "seed:categories:additional": "ts-node -r dotenv/config src/database/seeds/additional-categories.seed-runner.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1115.0",
