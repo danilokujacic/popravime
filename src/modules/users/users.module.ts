@@ -7,12 +7,15 @@ import { UsersController } from './users.controller';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { TermsAcceptanceService } from './terms-acceptance.service';
 import { TermsAcceptanceGuard } from './guards/terms-acceptance.guard';
+import { TermsAcceptance } from './entities/terms-acceptance.entity';
+import { TermsAcceptancesRepository } from './terms-acceptances.repository';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User])],
+  imports: [TypeOrmModule.forFeature([User, TermsAcceptance])],
   controllers: [UsersController],
   providers: [
     UsersRepository,
+    TermsAcceptancesRepository,
     UsersService,
     PasswordHasher,
     TermsAcceptanceService,

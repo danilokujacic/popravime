@@ -15,6 +15,7 @@ export class UserResponseMapper {
     dto.role = user.role;
     dto.locale = user.locale;
     dto.termsAccepted = user.termsVersion === requiredTermsVersion;
+    dto.requiredTermsVersion = requiredTermsVersion;
     dto.createdAt = user.createdAt;
     return dto;
   }

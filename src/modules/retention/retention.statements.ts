@@ -56,6 +56,17 @@ export const INQUIRY_PURGE_STATEMENTS: string[] = [
   `DELETE FROM direct_inquiries WHERE id = ANY($1::uuid[])`,
 ];
 
+export const DELETE_ACCEPTANCE_RECORDS_OF_ERASED_USERS = `
+  WITH deleted AS (
+    DELETE FROM terms_acceptances
+    WHERE user_id IN (
+      SELECT id FROM users WHERE deleted_at IS NOT NULL AND deleted_at < $1
+    )
+    RETURNING id
+  )
+  SELECT count(*)::int AS count FROM deleted
+`;
+
 export const DELETE_EXPIRED_CONTACT_MESSAGES = `
   WITH deleted AS (
     DELETE FROM contact_messages WHERE created_at < $1 RETURNING id

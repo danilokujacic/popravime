@@ -1,10 +1,13 @@
 import { Expose } from 'class-transformer';
 import {
+  Equals,
+  IsBoolean,
   IsEmail,
   IsIn,
   IsOptional,
   IsPhoneNumber,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -42,4 +45,19 @@ export class RegisterDto {
 
   @IsIn(REGISTERABLE_ROLES)
   role: UserRole;
+
+  @IsBoolean()
+  @Equals(true)
+  @Expose({ name: 'terms_accepted' })
+  termsAccepted: boolean;
+
+  @IsString()
+  @MaxLength(64)
+  @Expose({ name: 'terms_version' })
+  termsVersion: string;
+
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  @Expose({ name: 'terms_hash' })
+  termsHash: string;
 }

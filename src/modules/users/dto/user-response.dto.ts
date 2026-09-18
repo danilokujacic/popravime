@@ -8,5 +8,6 @@ export class UserResponseDto {
   role: UserRole;
   locale: Locale;
   termsAccepted: boolean;
+  requiredTermsVersion: string;
   createdAt: Date;
 }

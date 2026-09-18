@@ -3,6 +3,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { PurgeOutcome } from './retention.types';
 import {
+  DELETE_ACCEPTANCE_RECORDS_OF_ERASED_USERS,
   DELETE_EXPIRED_CONFIRMATIONS,
   DELETE_EXPIRED_CONTACT_MESSAGES,
   INQUIRY_PURGE_STATEMENTS,
@@ -78,6 +79,14 @@ export class RetentionRepository {
     const rows = await this.dataSource.query<CountRow[]>(
       DELETE_EXPIRED_CONTACT_MESSAGES,
       [cutoff],
+    );
+    return rows[0]?.count ?? 0;
+  }
+
+  async PurgeAcceptanceRecords(erasedBefore: Date): Promise<number> {
+    const rows = await this.dataSource.query<CountRow[]>(
+      DELETE_ACCEPTANCE_RECORDS_OF_ERASED_USERS,
+      [erasedBefore],
     );
     return rows[0]?.count ?? 0;
   }

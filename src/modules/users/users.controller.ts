@@ -1,8 +1,19 @@
-import { Body, Controller, Get, Inject, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Patch,
+  Post,
+  Req,
+} from '@nestjs/common';
+import type { Request } from 'express';
 import type { ConfigType } from '@nestjs/config';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { AcceptTermsDto } from './dto/accept-terms.dto';
+import { BuildTermsEvidence } from './terms-evidence.builder';
 import { UserResponseMapper } from './mappers/user-response.mapper';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
@@ -42,8 +53,13 @@ export class UsersController {
   @Post('me/terms-acceptance')
   async AcceptTerms(
     @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: AcceptTermsDto,
+    @Req() request: Request,
   ): Promise<UserResponseDto> {
-    const user = await this.usersService.AcceptTerms(currentUser.id);
+    const user = await this.usersService.AcceptTerms(
+      currentUser.id,
+      BuildTermsEvidence(request, dto.version, dto.documentHash),
+    );
     return UserResponseMapper.ToDto(user, this.legal.termsVersion);
   }
 }

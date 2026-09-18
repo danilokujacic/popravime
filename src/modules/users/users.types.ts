@@ -14,6 +14,18 @@ export enum Locale {
   En = 'en',
 }
 
+export enum TermsAcceptanceSource {
+  Register = 'register',
+  AcceptPage = 'accept_page',
+}
+
+export interface TermsAcceptanceEvidence {
+  version: string;
+  documentHash: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
 export interface CreateUserInput {
   email: string;
   password: string;

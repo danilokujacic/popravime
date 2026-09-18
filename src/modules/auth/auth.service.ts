@@ -10,7 +10,12 @@ import { EmailConfirmationsService } from '../email-confirmations/email-confirma
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { jwtConfig } from '../../config/jwt.config';
 import { appConfig } from '../../config/app.config';
-import { CreateUserInput, OAuthProfile, UserRole } from '../users/users.types';
+import {
+  CreateUserInput,
+  OAuthProfile,
+  TermsAcceptanceEvidence,
+  UserRole,
+} from '../users/users.types';
 import { LoginInput, PendingConfirmationResult } from './auth.types';
 import { TokenPair } from './interfaces/token-pair.interface';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -51,7 +56,10 @@ export class AuthService implements IAuthService {
   // yet, so there's no session to hand over until the confirmation link is clicked. OAuth signup
   // (CompleteOAuthSignup below) is unaffected: the provider already proved the email, so that
   // path still logs in immediately.
-  async Register(input: CreateUserInput): Promise<PendingConfirmationResult> {
+  async Register(
+    input: CreateUserInput,
+    evidence: TermsAcceptanceEvidence,
+  ): Promise<PendingConfirmationResult> {
     const existing = await this.usersService.FindByEmail(input.email);
     if (existing) {
       this.logger.warn(
@@ -64,7 +72,7 @@ export class AuthService implements IAuthService {
       );
     }
 
-    const user = await this.usersService.Register(input);
+    const user = await this.usersService.Register(input, evidence);
     this.logger.info({ userId: user.id, role: user.role }, 'User registered');
 
     await this.SendConfirmationEmail(user);

@@ -99,6 +99,13 @@ function BuildService(overrides?: {
   };
 }
 
+const EVIDENCE = {
+  version: '2026-09-18',
+  documentHash: 'a'.repeat(64),
+  ipAddress: '203.0.113.7',
+  userAgent: 'test-agent',
+};
+
 describe('AuthService', () => {
   describe('Register', () => {
     it('rejects registration when the email is already taken', async () => {
@@ -109,12 +116,15 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.Register({
-          email: 'ana@popravime.me',
-          password: 'password123',
-          fullName: 'Ana Petrović',
-          role: UserRole.Customer,
-        }),
+        service.Register(
+          {
+            email: 'ana@popravime.me',
+            password: 'password123',
+            fullName: 'Ana Petrović',
+            role: UserRole.Customer,
+          },
+          EVIDENCE,
+        ),
       ).rejects.toBeInstanceOf(DomainConflictException);
 
       expect(usersService.Register).not.toHaveBeenCalled();
@@ -137,12 +147,15 @@ describe('AuthService', () => {
         },
       });
 
-      const result = await service.Register({
-        email: 'ana@popravime.me',
-        password: 'password123',
-        fullName: 'Ana Petrović',
-        role: UserRole.Customer,
-      });
+      const result = await service.Register(
+        {
+          email: 'ana@popravime.me',
+          password: 'password123',
+          fullName: 'Ana Petrović',
+          role: UserRole.Customer,
+        },
+        EVIDENCE,
+      );
 
       expect(usersService.Register).toHaveBeenCalled();
       expect(emailConfirmationsService.Create).toHaveBeenCalledWith(

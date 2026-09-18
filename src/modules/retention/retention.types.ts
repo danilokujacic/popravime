@@ -5,6 +5,7 @@ export interface PurgeOutcome {
 
 export interface PurgeSummary {
   inactiveAccounts: number;
+  acceptanceRecords: number;
   requests: number;
   inquiries: number;
   contactMessages: number;
@@ -15,6 +16,7 @@ export interface PurgeSummary {
 
 export interface PurgeCutoffs {
   inactiveAccounts: Date;
+  acceptanceRecords: Date;
   completedRequests: Date;
   unacceptedRequests: Date;
   inquiries: Date;

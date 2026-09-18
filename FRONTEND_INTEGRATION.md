@@ -256,7 +256,7 @@ account, that still goes through the full `/auth/register` + business-profile fl
 |---|---|---|---|
 | GET | `/users/me` | any authenticated | current user's own profile |
 | PATCH | `/users/me` | any authenticated | body: `{full_name?, phone?}` |
-| POST | `/users/me/terms-acceptance` | any authenticated | records that the caller accepted the current privacy policy / terms (`LEGAL_TERMS_VERSION`); returns the updated user |
+| POST | `/users/me/terms-acceptance` | any authenticated | body `{version, document_hash}` — the version and SHA-256 of the legal documents the user was shown; must equal `LEGAL_TERMS_VERSION` / `LEGAL_TERMS_HASH` or `409 TERMS_VERSION_MISMATCH` (page out of date, reload). Records the acceptance and returns the updated user |
 | GET | `/users/me/export` | any authenticated | everything held about the caller: `{profile, provider, repair_requests, messages_sent, reviews_written, direct_inquiries, notifications, exported_at}` (right of access) |
 | DELETE | `/users/me` | customer, provider_owner | erases the account, `204` with no body (right to erasure) |
 
@@ -268,6 +268,16 @@ contact details are removed. Access and refresh tokens stop working immediately.
 `409 ACCOUNT_HAS_ACTIVE_WORK` while the caller has an `accepted`/`in_progress` request or an
 accepted offer on one, and with `403 ADMIN_ACCOUNT_NOT_ERASABLE` for admins. Both endpoints use
 the auth rate limit.
+
+**Acceptance evidence.** Every acceptance (registration, or the acceptance page) appends a row to
+`terms_acceptances`: user, version, SHA-256 of the exact documents shown, source (`register` /
+`accept_page`, or `legacy` for pre-existing stamps), IP address, user agent and time. The table is
+append-only (a database trigger rejects UPDATE); rows are deleted only by the retention job,
+`RETENTION_ACCEPTANCE_RECORDS_DAYS` (default 730) after the account was erased. `POST /auth/register`
+now requires `terms_accepted: true`, `terms_version` and `terms_hash` (same rules as above); Google
+signups are created unaccepted and must accept on the acceptance page. `LEGAL_TERMS_VERSION` and
+`LEGAL_TERMS_HASH` come from `pnpm legal:version` in the frontend repo; set them on the backend
+**before** deploying a frontend whose documents changed, or nobody can accept.
 
 **Terms are enforced server-side.** Every authenticated endpoint answers `403 TERMS_NOT_ACCEPTED`
 until the user has accepted the current `LEGAL_TERMS_VERSION`. Only `/users/me*` (profile, terms
@@ -291,7 +301,7 @@ Other records are also purged automatically on a daily schedule (`RETENTION_*` e
 with the published privacy policy): closed requests after 24 months (6 months if never
 accepted), direct inquiries and contact messages after 12 months, expired email confirmations.
 
-Response shape: `{id, email, full_name, phone, role, locale, terms_accepted, created_at}`.
+Response shape: `{id, email, full_name, phone, role, locale, terms_accepted, required_terms_version, created_at}`.
 `terms_accepted` is `false` until the user has accepted the current policy version (every existing
 account starts `false`, and bumping `LEGAL_TERMS_VERSION` resets everyone); the frontend must send
 such a user to an acceptance page before letting them use the app. Email and role are not

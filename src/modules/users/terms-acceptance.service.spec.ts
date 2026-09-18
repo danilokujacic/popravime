@@ -9,16 +9,14 @@ function BuildService(options?: {
   userMissing?: boolean;
 }) {
   const usersRepository = {
-    FindById: jest
-      .fn()
-      .mockResolvedValue(
-        options?.userMissing
-          ? null
-          : ({
-              id: 'user-1',
-              termsVersion: options?.termsVersion ?? null,
-            } as User),
-      ),
+    FindById: jest.fn().mockResolvedValue(
+      options?.userMissing
+        ? null
+        : ({
+            id: 'user-1',
+            termsVersion: options?.termsVersion ?? null,
+          } as User),
+    ),
   } as unknown as UsersRepository;
   const cacheService = {
     Get: jest.fn().mockResolvedValue(options?.cached),
@@ -28,6 +26,7 @@ function BuildService(options?: {
 
   const service = new TermsAcceptanceService(usersRepository, cacheService, {
     termsVersion: '2026-09-18',
+    termsHash: '',
     termsCacheTtlSeconds: 300,
   });
 

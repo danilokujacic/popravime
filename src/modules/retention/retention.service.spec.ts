@@ -15,6 +15,7 @@ function BuildService() {
       .fn()
       .mockResolvedValue({ records: 1, fileUrls: ['https://files/b.pdf'] }),
     PurgeContactMessages: jest.fn().mockResolvedValue(3),
+    PurgeAcceptanceRecords: jest.fn().mockResolvedValue(5),
     PurgeExpiredConfirmations: jest.fn().mockResolvedValue(4),
   } as unknown as RetentionRepository;
   const storageCleanupService = {
@@ -38,6 +39,7 @@ function BuildService() {
     accountErasureService,
     {
       inactiveAccountsDays: 60,
+      acceptanceRecordsDays: 730,
       completedRequestsDays: 730,
       unacceptedRequestsDays: 180,
       inquiriesDays: 365,
@@ -98,6 +100,7 @@ describe('RetentionService.Purge', () => {
     ]);
     expect(summary).toEqual({
       inactiveAccounts: 1,
+      acceptanceRecords: 5,
       requests: 2,
       inquiries: 1,
       contactMessages: 3,

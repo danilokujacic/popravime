@@ -1,6 +1,9 @@
 import { UsersService } from './users.service';
 import { UsersRepository } from './users.repository';
 import { TermsAcceptanceService } from './terms-acceptance.service';
+import { TermsAcceptancesRepository } from './terms-acceptances.repository';
+import type { TermsAcceptanceEvidence } from './users.types';
+import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { User } from './entities/user.entity';
 import { OAuthProfile, OAuthProvider, UserRole } from './users.types';
@@ -14,6 +17,13 @@ function BuildProfile(overrides?: Partial<OAuthProfile>): OAuthProfile {
     ...overrides,
   };
 }
+
+const EVIDENCE: TermsAcceptanceEvidence = {
+  version: '2026-09-18',
+  documentHash: 'a'.repeat(64),
+  ipAddress: '203.0.113.7',
+  userAgent: 'test-agent',
+};
 
 function BuildUser(overrides?: Partial<User>): User {
   return {
@@ -52,14 +62,25 @@ function BuildService(overrides?: {
     Invalidate: jest.fn().mockResolvedValue(undefined),
   } as unknown as TermsAcceptanceService;
 
+  const termsAcceptancesRepository = {
+    Create: jest.fn().mockResolvedValue(undefined),
+  } as unknown as TermsAcceptancesRepository;
+
   const service = new UsersService(
     usersRepository,
+    termsAcceptancesRepository,
     passwordHasher,
     termsAcceptanceService,
-    { termsVersion: '2026-09-18', termsCacheTtlSeconds: 300 },
+    { termsVersion: '2026-09-18', termsHash: '', termsCacheTtlSeconds: 300 },
   );
 
-  return { service, usersRepository, passwordHasher };
+  return {
+    service,
+    usersRepository,
+    passwordHasher,
+    termsAcceptancesRepository,
+    termsAcceptanceService,
+  };
 }
 
 describe('UsersService.FindOAuthMatch', () => {
@@ -150,15 +171,18 @@ describe('UsersService.CreateOAuthUser', () => {
 });
 
 describe('UsersService terms and activity', () => {
-  it('stamps the current terms version when a user registers', async () => {
-    const { service, usersRepository } = BuildService();
+  const REGISTER_INPUT = {
+    email: 'ana@example.com',
+    password: 'password123',
+    fullName: 'Ana Petrović',
+    role: UserRole.Customer,
+  };
 
-    await service.Register({
-      email: 'ana@example.com',
-      password: 'password123',
-      fullName: 'Ana Petrović',
-      role: UserRole.Customer,
-    });
+  it('stamps the current terms version and records the acceptance when a user registers', async () => {
+    const { service, usersRepository, termsAcceptancesRepository } =
+      BuildService();
+
+    await service.Register(REGISTER_INPUT, EVIDENCE);
 
     expect(usersRepository.Create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -166,10 +190,46 @@ describe('UsersService terms and activity', () => {
         termsAcceptedAt: expect.any(Date) as Date,
       }),
     );
+    expect(termsAcceptancesRepository.Create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'new-user',
+        version: '2026-09-18',
+        documentHash: 'a'.repeat(64),
+        source: 'register',
+        ipAddress: '203.0.113.7',
+        userAgent: 'test-agent',
+      }),
+    );
   });
 
-  it('records acceptance of the current terms version', async () => {
-    const { service, usersRepository } = BuildService({
+  it('refuses to register a user who saw an out-of-date version', async () => {
+    const { service, usersRepository } = BuildService();
+
+    await expect(
+      service.Register(REGISTER_INPUT, { ...EVIDENCE, version: '2026-01-01' }),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(usersRepository.Create).not.toHaveBeenCalled();
+  });
+
+  it('does not stamp acceptance on an OAuth signup, so the user must accept explicitly', async () => {
+    const { service, usersRepository, termsAcceptancesRepository } =
+      BuildService();
+
+    await service.CreateOAuthUser(BuildProfile(), UserRole.Customer);
+
+    const created = (usersRepository.Create as jest.Mock).mock
+      .calls[0][0] as Partial<User>;
+    expect(created.termsVersion).toBeUndefined();
+    expect(termsAcceptancesRepository.Create).not.toHaveBeenCalled();
+  });
+
+  it('records acceptance of the current terms version with its evidence', async () => {
+    const {
+      service,
+      usersRepository,
+      termsAcceptancesRepository,
+      termsAcceptanceService,
+    } = BuildService({
       usersRepository: {
         FindById: jest
           .fn()
@@ -177,11 +237,24 @@ describe('UsersService terms and activity', () => {
       },
     });
 
-    const user = await service.AcceptTerms('user-1');
+    const user = await service.AcceptTerms('user-1', EVIDENCE);
 
     expect(user.termsVersion).toBe('2026-09-18');
     expect(user.termsAcceptedAt).toBeInstanceOf(Date);
     expect(usersRepository.Save).toHaveBeenCalled();
+    expect(termsAcceptancesRepository.Create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', source: 'accept_page' }),
+    );
+    expect(termsAcceptanceService.Invalidate).toHaveBeenCalledWith('user-1');
+  });
+
+  it('refuses an acceptance for a different version than the current one', async () => {
+    const { service, termsAcceptancesRepository } = BuildService();
+
+    await expect(
+      service.AcceptTerms('user-1', { ...EVIDENCE, version: 'old' }),
+    ).rejects.toBeInstanceOf(DomainConflictException);
+    expect(termsAcceptancesRepository.Create).not.toHaveBeenCalled();
   });
 
   it('only refreshes the activity timestamp when it is older than a day', async () => {

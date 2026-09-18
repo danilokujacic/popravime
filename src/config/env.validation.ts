@@ -120,8 +120,13 @@ export const EnvValidationSchema = Joi.object({
   EMAIL_CONFIRMATION_TTL_SECONDS: Joi.number().default(86400),
 
   LEGAL_TERMS_VERSION: Joi.string().default('2026-09-18'),
+  LEGAL_TERMS_HASH: Joi.string()
+    .pattern(/^[a-f0-9]{64}$/)
+    .allow('')
+    .default(''),
   LEGAL_TERMS_CACHE_TTL_SECONDS: Joi.number().integer().min(1).default(300),
 
+  RETENTION_ACCEPTANCE_RECORDS_DAYS: Joi.number().integer().min(1).default(730),
   RETENTION_INACTIVE_ACCOUNTS_DAYS: Joi.number().integer().min(1).default(60),
   RETENTION_COMPLETED_REQUESTS_DAYS: Joi.number().integer().min(1).default(730),
   RETENTION_UNACCEPTED_REQUESTS_DAYS: Joi.number()

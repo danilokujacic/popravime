@@ -44,6 +44,10 @@ export class RetentionService implements IRetentionService {
     const contactMessages = await this.retentionRepository.PurgeContactMessages(
       cutoffs.contactMessages,
     );
+    const acceptanceRecords =
+      await this.retentionRepository.PurgeAcceptanceRecords(
+        cutoffs.acceptanceRecords,
+      );
     const expiredConfirmations =
       await this.retentionRepository.PurgeExpiredConfirmations();
 
@@ -53,6 +57,7 @@ export class RetentionService implements IRetentionService {
 
     const summary: PurgeSummary = {
       inactiveAccounts,
+      acceptanceRecords,
       requests: requests.records,
       inquiries: inquiries.records,
       contactMessages,
@@ -97,6 +102,7 @@ export class RetentionService implements IRetentionService {
   private BuildCutoffs(now: Date): PurgeCutoffs {
     return {
       inactiveAccounts: DaysBefore(now, this.config.inactiveAccountsDays),
+      acceptanceRecords: DaysBefore(now, this.config.acceptanceRecordsDays),
       completedRequests: DaysBefore(now, this.config.completedRequestsDays),
       unacceptedRequests: DaysBefore(now, this.config.unacceptedRequestsDays),
       inquiries: DaysBefore(now, this.config.inquiriesDays),

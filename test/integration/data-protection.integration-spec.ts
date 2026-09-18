@@ -170,6 +170,72 @@ describe('Data protection integration', () => {
     });
   });
 
+  describe('terms acceptance records', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    function InsertAcceptance(userId: string): Promise<string> {
+      return InsertRow(
+        `INSERT INTO terms_acceptances (user_id, version, document_hash, source, ip_address, user_agent)
+         VALUES ($1, '2026-09-18-abc', $2, 'register', '203.0.113.7', 'test-agent') RETURNING id`,
+        [userId, 'a'.repeat(64)],
+      );
+    }
+
+    it('accepts new records but refuses to modify an existing one', async () => {
+      const userId = await InsertUser('evidence@example.com');
+      const recordId = await InsertAcceptance(userId);
+
+      await dataSource.query(
+        `DO $$
+         BEGIN
+           UPDATE terms_acceptances SET version = 'tampered' WHERE id = '${recordId}';
+           RAISE EXCEPTION 'update was allowed';
+         EXCEPTION WHEN raise_exception THEN
+           IF SQLERRM <> 'terms_acceptances is append-only' THEN
+             RAISE;
+           END IF;
+         END $$`,
+      );
+
+      const [record] = await dataSource.query<{ version: string }[]>(
+        `SELECT version FROM terms_acceptances WHERE id = $1`,
+        [recordId],
+      );
+      expect(record.version).toBe('2026-09-18-abc');
+    });
+
+    it('purges records only for users erased before the cutoff', async () => {
+      const repository = new RetentionRepository(dataSource);
+      const longErased = await InsertUser('long-erased@example.com');
+      const recentlyErased = await InsertUser('recently-erased@example.com');
+      const active = await InsertUser('active-evidence@example.com');
+      const longErasedRecord = await InsertAcceptance(longErased);
+      const recentRecord = await InsertAcceptance(recentlyErased);
+      const activeRecord = await InsertAcceptance(active);
+      await dataSource.query(`UPDATE users SET deleted_at = $2 WHERE id = $1`, [
+        longErased,
+        new Date(Date.now() - 800 * DAY_MS),
+      ]);
+      await dataSource.query(`UPDATE users SET deleted_at = $2 WHERE id = $1`, [
+        recentlyErased,
+        new Date(Date.now() - 10 * DAY_MS),
+      ]);
+
+      const purged = await repository.PurgeAcceptanceRecords(
+        new Date(Date.now() - 730 * DAY_MS),
+      );
+
+      expect(purged).toBe(1);
+      const remaining = await dataSource.query<IdRow[]>(
+        `SELECT id FROM terms_acceptances WHERE id = ANY($1::uuid[])`,
+        [[longErasedRecord, recentRecord, activeRecord]],
+      );
+      expect(remaining.map((row) => row.id).sort()).toEqual(
+        [recentRecord, activeRecord].sort(),
+      );
+    });
+  });
+
   describe('account erasure', () => {
     it('reports active work for a customer with an accepted request', async () => {
       const repository = new AccountErasureRepository(dataSource);

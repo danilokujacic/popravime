@@ -2,6 +2,7 @@ import { registerAs } from '@nestjs/config';
 
 export interface RetentionConfig {
   inactiveAccountsDays: number;
+  acceptanceRecordsDays: number;
   completedRequestsDays: number;
   unacceptedRequestsDays: number;
   inquiriesDays: number;
@@ -11,6 +12,9 @@ export interface RetentionConfig {
 }
 
 export const retentionConfig = registerAs('retention', (): RetentionConfig => ({
+  acceptanceRecordsDays: Number(
+    process.env.RETENTION_ACCEPTANCE_RECORDS_DAYS ?? 730,
+  ),
   inactiveAccountsDays: Number(
     process.env.RETENTION_INACTIVE_ACCOUNTS_DAYS ?? 60,
   ),

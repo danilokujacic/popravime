@@ -6,13 +6,16 @@ import {
   HttpStatus,
   Post,
   Redirect,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { OAuthExchangeService } from './oauth-exchange.service';
 import { RegisterDto } from './dto/register.dto';
+import { BuildTermsEvidence } from '../users/terms-evidence.builder';
 import { LoginDto } from './dto/login.dto';
 import { OAuthExchangeDto } from './dto/oauth-exchange.dto';
 import { OAuthCompleteDto } from './dto/oauth-complete.dto';
@@ -43,14 +46,20 @@ export class AuthController {
   @Public()
   @Throttle(AUTH_THROTTLE)
   @Post('register')
-  Register(@Body() dto: RegisterDto): Promise<PendingConfirmationDto> {
-    return this.authService.Register({
-      email: dto.email,
-      password: dto.password,
-      fullName: dto.fullName,
-      phone: dto.phone,
-      role: dto.role,
-    });
+  Register(
+    @Body() dto: RegisterDto,
+    @Req() request: Request,
+  ): Promise<PendingConfirmationDto> {
+    return this.authService.Register(
+      {
+        email: dto.email,
+        password: dto.password,
+        fullName: dto.fullName,
+        phone: dto.phone,
+        role: dto.role,
+      },
+      BuildTermsEvidence(request, dto.termsVersion, dto.termsHash),
+    );
   }
 
   @Public()

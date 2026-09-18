@@ -1,20 +1,27 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { Transactional } from 'typeorm-transactional';
 import type { ConfigType } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { UsersRepository } from './users.repository';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { User } from './entities/user.entity';
 import {
-  CreateUserInput,
   OAuthProfile,
+  TermsAcceptanceSource,
   UpdateUserInput,
   UserCredentials,
   UserRole,
+} from './users.types';
+import type {
+  CreateUserInput,
+  TermsAcceptanceEvidence,
 } from './users.types';
 import { IUsersService } from './users.service.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { legalConfig } from '../../config/legal.config';
 import { TermsAcceptanceService } from './terms-acceptance.service';
+import { TermsAcceptancesRepository } from './terms-acceptances.repository';
+import { DomainConflictException } from '../../common/exceptions/conflict.exception';
 
 const ACTIVITY_RESOLUTION_MS = 24 * 60 * 60 * 1000;
 
@@ -22,16 +29,22 @@ const ACTIVITY_RESOLUTION_MS = 24 * 60 * 60 * 1000;
 export class UsersService implements IUsersService {
   constructor(
     private readonly usersRepository: UsersRepository,
+    private readonly termsAcceptancesRepository: TermsAcceptancesRepository,
     private readonly passwordHasher: PasswordHasher,
     private readonly termsAcceptanceService: TermsAcceptanceService,
     @Inject(legalConfig.KEY)
     private readonly legal: ConfigType<typeof legalConfig>,
   ) {}
 
-  async Register(input: CreateUserInput): Promise<User> {
+  @Transactional()
+  async Register(
+    input: CreateUserInput,
+    evidence: TermsAcceptanceEvidence,
+  ): Promise<User> {
+    this.EnsureCurrentTerms(evidence);
     const passwordHash = await this.passwordHasher.Hash(input.password);
 
-    return this.usersRepository.Create({
+    const user = await this.usersRepository.Create({
       email: input.email,
       passwordHash,
       fullName: input.fullName,
@@ -41,6 +54,12 @@ export class UsersService implements IUsersService {
       termsAcceptedAt: new Date(),
       termsVersion: this.legal.termsVersion,
     });
+    await this.RecordAcceptance(
+      user.id,
+      TermsAcceptanceSource.Register,
+      evidence,
+    );
+    return user;
   }
 
   async FindById(id: string): Promise<User> {
@@ -98,8 +117,6 @@ export class UsersService implements IUsersService {
       // The OAuth provider already proved ownership of this email address — no confirmation
       // link needed.
       emailVerified: true,
-      termsAcceptedAt: new Date(),
-      termsVersion: this.legal.termsVersion,
     });
   }
 
@@ -128,11 +145,17 @@ export class UsersService implements IUsersService {
     return this.usersRepository.Save(user);
   }
 
-  async AcceptTerms(id: string): Promise<User> {
+  @Transactional()
+  async AcceptTerms(
+    id: string,
+    evidence: TermsAcceptanceEvidence,
+  ): Promise<User> {
+    this.EnsureCurrentTerms(evidence);
     const user = await this.FindById(id);
     user.termsAcceptedAt = new Date();
     user.termsVersion = this.legal.termsVersion;
     const saved = await this.usersRepository.Save(user);
+    await this.RecordAcceptance(id, TermsAcceptanceSource.AcceptPage, evidence);
     await this.termsAcceptanceService.Invalidate(id);
     return saved;
   }
@@ -142,5 +165,33 @@ export class UsersService implements IUsersService {
       id,
       new Date(Date.now() - ACTIVITY_RESOLUTION_MS),
     );
+  }
+
+  private EnsureCurrentTerms(evidence: TermsAcceptanceEvidence): void {
+    const versionMatches = evidence.version === this.legal.termsVersion;
+    const hashMatches =
+      this.legal.termsHash === '' ||
+      evidence.documentHash === this.legal.termsHash;
+    if (!versionMatches || !hashMatches) {
+      throw new DomainConflictException(
+        'TERMS_VERSION_MISMATCH',
+        'The privacy policy and terms shown are out of date; reload the page and try again',
+      );
+    }
+  }
+
+  private async RecordAcceptance(
+    userId: string,
+    source: TermsAcceptanceSource,
+    evidence: TermsAcceptanceEvidence,
+  ): Promise<void> {
+    await this.termsAcceptancesRepository.Create({
+      userId,
+      version: this.legal.termsVersion,
+      documentHash: this.legal.termsHash || evidence.documentHash,
+      source,
+      ipAddress: evidence.ipAddress,
+      userAgent: evidence.userAgent,
+    });
   }
 }
