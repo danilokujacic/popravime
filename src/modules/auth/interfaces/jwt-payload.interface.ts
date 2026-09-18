@@ -5,5 +5,6 @@ export interface JwtPayload {
   email: string;
   role: UserRole;
   jti: string;
+  authTime?: number;
   exp?: number;
 }

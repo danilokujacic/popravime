@@ -1,5 +1,6 @@
 import { UsersService } from './users.service';
 import { UsersRepository } from './users.repository';
+import { TermsAcceptanceService } from './terms-acceptance.service';
 import { PasswordHasher } from '../../shared/password/password-hasher';
 import { User } from './entities/user.entity';
 import { OAuthProfile, OAuthProvider, UserRole } from './users.types';
@@ -47,9 +48,16 @@ function BuildService(overrides?: {
     Hash: jest.fn().mockResolvedValue('random-hash'),
   } as unknown as PasswordHasher;
 
-  const service = new UsersService(usersRepository, passwordHasher, {
-    termsVersion: '2026-09-18',
-  });
+  const termsAcceptanceService = {
+    Invalidate: jest.fn().mockResolvedValue(undefined),
+  } as unknown as TermsAcceptanceService;
+
+  const service = new UsersService(
+    usersRepository,
+    passwordHasher,
+    termsAcceptanceService,
+    { termsVersion: '2026-09-18', termsCacheTtlSeconds: 300 },
+  );
 
   return { service, usersRepository, passwordHasher };
 }

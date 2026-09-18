@@ -37,7 +37,7 @@ describe('ContactMessagesService.UpdateStatus', () => {
     const service = new ContactMessagesService(
       contactMessagesRepository,
       auditLogsService,
-      { termsVersion: '2026-09-18' },
+      { termsVersion: '2026-09-18', termsCacheTtlSeconds: 300 },
       logger,
     );
 

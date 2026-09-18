@@ -45,6 +45,7 @@ export class RefreshTokenStrategy extends PassportStrategy(
       id: payload.sub,
       email: payload.email,
       role: payload.role,
+      authTime: payload.authTime,
       jti: payload.jti,
       expiresAt: this.ExtractExpiry(payload),
     };

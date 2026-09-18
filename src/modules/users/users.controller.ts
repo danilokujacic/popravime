@@ -7,7 +7,9 @@ import { UserResponseMapper } from './mappers/user-response.mapper';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { legalConfig } from '../../config/legal.config';
+import { AllowUnacceptedTerms } from '../../common/decorators/allow-unaccepted-terms.decorator';
 
+@AllowUnacceptedTerms()
 @Controller('users')
 export class UsersController {
   constructor(

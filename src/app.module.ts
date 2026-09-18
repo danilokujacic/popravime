@@ -6,6 +6,7 @@ import type { ConfigType } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { TermsAcceptanceGuard } from './modules/users/guards/terms-acceptance.guard';
 import { ConfigNamespaces } from './config/configuration';
 import { EnvValidationSchema } from './config/env.validation';
 import { appConfig } from './config/app.config';
@@ -94,6 +95,7 @@ import { RetentionModule } from './modules/retention/retention.module';
     { provide: APP_INTERCEPTOR, useClass: CaseTransformInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: TermsAcceptanceGuard },
   ],
 })
 export class AppModule {}

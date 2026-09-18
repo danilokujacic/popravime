@@ -1,6 +1,7 @@
 import { AccountErasureService } from './account-erasure.service';
 import { AccountErasureRepository } from './account-erasure.repository';
 import { AccountRevocationService } from '../auth/account-revocation.service';
+import { RecentAuthenticationService } from '../auth/recent-authentication.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { StorageCleanupService } from '../infra/storage/storage-cleanup.service';
 import { UserRole } from '../users/users.types';
@@ -27,6 +28,9 @@ function BuildService(overrides?: { hasActiveWork?: boolean }) {
   const accountRevocationService = {
     Revoke: jest.fn().mockResolvedValue(undefined),
   } as unknown as AccountRevocationService;
+  const recentAuthenticationService = {
+    Ensure: jest.fn(),
+  } as unknown as RecentAuthenticationService;
   const auditLogsService = {
     Log: jest.fn().mockResolvedValue(undefined),
   } as unknown as AuditLogsService;
@@ -36,11 +40,12 @@ function BuildService(overrides?: { hasActiveWork?: boolean }) {
   const logger = {
     info: jest.fn(),
     warn: jest.fn(),
-  } as unknown as ConstructorParameters<typeof AccountErasureService>[5];
+  } as unknown as ConstructorParameters<typeof AccountErasureService>[6];
 
   const service = new AccountErasureService(
     accountErasureRepository,
     accountRevocationService,
+    recentAuthenticationService,
     auditLogsService,
     storageCleanupService,
     {
@@ -48,6 +53,7 @@ function BuildService(overrides?: { hasActiveWork?: boolean }) {
       accessExpiresInSeconds: 900,
       refreshSecret: 'r',
       refreshExpiresInSeconds: 604800,
+      reauthWindowSeconds: 600,
     },
     logger,
   );
@@ -56,6 +62,7 @@ function BuildService(overrides?: { hasActiveWork?: boolean }) {
     service,
     accountErasureRepository,
     accountRevocationService,
+    recentAuthenticationService,
     auditLogsService,
     storageCleanupService,
   };
@@ -87,6 +94,20 @@ describe('AccountErasureService.Erase', () => {
     expect(storageCleanupService.DeleteByUrls).toHaveBeenCalledWith([
       'https://files/a.jpg',
     ]);
+  });
+
+  it('does nothing when the login is not recent enough', async () => {
+    const { service, accountErasureRepository, recentAuthenticationService } =
+      BuildService();
+    (recentAuthenticationService.Ensure as jest.Mock).mockImplementation(() => {
+      throw new DomainForbiddenException('REAUTH_REQUIRED', 'log in again');
+    });
+
+    await expect(service.Erase(BuildUser())).rejects.toBeInstanceOf(
+      DomainForbiddenException,
+    );
+    expect(accountErasureRepository.HasActiveWork).not.toHaveBeenCalled();
+    expect(accountErasureRepository.Erase).not.toHaveBeenCalled();
   });
 
   it('refuses to erase an admin account', async () => {

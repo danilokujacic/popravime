@@ -5,6 +5,7 @@ export interface JwtConfig {
   accessExpiresInSeconds: number;
   refreshSecret: string;
   refreshExpiresInSeconds: number;
+  reauthWindowSeconds: number;
 }
 
 export const jwtConfig = registerAs('jwt', (): JwtConfig => ({
@@ -16,4 +17,5 @@ export const jwtConfig = registerAs('jwt', (): JwtConfig => ({
   refreshExpiresInSeconds: Number(
     process.env.JWT_REFRESH_EXPIRES_IN_SECONDS ?? 604800,
   ),
+  reauthWindowSeconds: Number(process.env.REAUTH_WINDOW_SECONDS ?? 600),
 }));

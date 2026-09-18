@@ -25,6 +25,10 @@ import { EmailQueueService } from '../infra/email/email-queue.service';
 import { RefreshTokenDenylistService } from './refresh-token-denylist.service';
 import { CORRELATION_ID_CLS_KEY } from '../../common/constants/correlation.constants';
 
+function NowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
 @Injectable()
 export class AuthService implements IAuthService {
   constructor(
@@ -110,6 +114,7 @@ export class AuthService implements IAuthService {
       credentials.id,
       credentials.email,
       credentials.role,
+      NowSeconds(),
     );
   }
 
@@ -120,7 +125,7 @@ export class AuthService implements IAuthService {
     const email = await this.emailConfirmationsService.Confirm(slug);
     const user = await this.usersService.MarkEmailVerified(email);
     this.logger.info({ userId: user.id }, 'Email confirmed');
-    return this.IssueTokens(user.id, user.email, user.role);
+    return this.IssueTokens(user.id, user.email, user.role, NowSeconds());
   }
 
   async ResendConfirmation(email: string): Promise<void> {
@@ -169,7 +174,7 @@ export class AuthService implements IAuthService {
 
   Refresh(user: AuthenticatedUser): Promise<TokenPair> {
     this.logger.info({ userId: user.id }, 'Access token refreshed');
-    return this.IssueTokens(user.id, user.email, user.role);
+    return this.IssueTokens(user.id, user.email, user.role, user.authTime);
   }
 
   async TryOAuthLogin(profile: OAuthProfile): Promise<TokenPair | null> {
@@ -181,7 +186,7 @@ export class AuthService implements IAuthService {
       { userId: user.id, provider: profile.provider },
       'User logged in via OAuth',
     );
-    return this.IssueTokens(user.id, user.email, user.role);
+    return this.IssueTokens(user.id, user.email, user.role, NowSeconds());
   }
 
   async CompleteOAuthSignup(
@@ -195,7 +200,7 @@ export class AuthService implements IAuthService {
       { userId: user.id, provider: profile.provider, role: user.role },
       existing ? 'User logged in via OAuth' : 'User signed up via OAuth',
     );
-    return this.IssueTokens(user.id, user.email, user.role);
+    return this.IssueTokens(user.id, user.email, user.role, NowSeconds());
   }
 
   async Logout(session: RefreshTokenSession): Promise<void> {
@@ -211,10 +216,17 @@ export class AuthService implements IAuthService {
     userId: string,
     email: string,
     role: UserRole,
+    authTime: number | undefined,
   ): Promise<TokenPair> {
     await this.usersService.TouchActivity(userId);
 
-    const payload: JwtPayload = { sub: userId, email, role, jti: randomUUID() };
+    const payload: JwtPayload = {
+      sub: userId,
+      email,
+      role,
+      jti: randomUUID(),
+      ...(authTime === undefined ? {} : { authTime }),
+    };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {

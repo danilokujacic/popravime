@@ -5,11 +5,24 @@ import { UsersRepository } from './users.repository';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { PasswordHasher } from '../../shared/password/password-hasher';
+import { TermsAcceptanceService } from './terms-acceptance.service';
+import { TermsAcceptanceGuard } from './guards/terms-acceptance.guard';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User])],
   controllers: [UsersController],
-  providers: [UsersRepository, UsersService, PasswordHasher],
-  exports: [UsersService, PasswordHasher],
+  providers: [
+    UsersRepository,
+    UsersService,
+    PasswordHasher,
+    TermsAcceptanceService,
+    TermsAcceptanceGuard,
+  ],
+  exports: [
+    UsersService,
+    PasswordHasher,
+    TermsAcceptanceService,
+    TermsAcceptanceGuard,
+  ],
 })
 export class UsersModule {}

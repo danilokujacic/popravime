@@ -33,6 +33,7 @@ describe('RefreshTokenStrategy.validate', () => {
         accessExpiresInSeconds: 900,
         refreshSecret: 'refresh-secret',
         refreshExpiresInSeconds: 604800,
+        reauthWindowSeconds: 600,
       },
       refreshTokenDenylistService,
       accountRevocationService,
@@ -72,5 +73,15 @@ describe('RefreshTokenStrategy.validate', () => {
     await expect(strategy.validate(BuildPayload())).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+  });
+
+  it('carries the original login time into the session', async () => {
+    const { strategy } = BuildStrategy(false);
+
+    const session = await strategy.validate(
+      BuildPayload({ authTime: 1700000000 }),
+    );
+
+    expect(session.authTime).toBe(1700000000);
   });
 });

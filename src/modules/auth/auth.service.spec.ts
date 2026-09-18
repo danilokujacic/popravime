@@ -58,6 +58,7 @@ function BuildService(overrides?: {
     accessExpiresInSeconds: 900,
     refreshSecret: 'refresh-secret',
     refreshExpiresInSeconds: 604800,
+    reauthWindowSeconds: 600,
   };
 
   const cls = {
@@ -93,6 +94,7 @@ function BuildService(overrides?: {
     passwordHasher,
     emailQueueService,
     refreshTokenDenylistService,
+    jwtService,
     logger,
   };
 }
@@ -241,6 +243,65 @@ describe('AuthService', () => {
         refreshToken: 'signed-token',
       });
       expect(usersService.TouchActivity).toHaveBeenCalledWith('user-1');
+    });
+
+    it('stamps the moment of a real login into the tokens', async () => {
+      const { service, jwtService } = BuildService({
+        usersService: {
+          FindCredentials: jest.fn().mockResolvedValue({
+            id: 'user-1',
+            email: 'ana@popravime.me',
+            passwordHash: 'hashed',
+            role: UserRole.Customer,
+            emailVerified: true,
+          }),
+        },
+        passwordHasher: { Verify: jest.fn().mockResolvedValue(true) },
+      });
+      const before = Math.floor(Date.now() / 1000);
+
+      await service.Login({
+        email: 'ana@popravime.me',
+        password: 'password123',
+      });
+
+      const payload = (jwtService.signAsync as jest.Mock).mock.calls[0][0] as {
+        authTime?: number;
+      };
+      expect(payload.authTime).toBeGreaterThanOrEqual(before);
+    });
+  });
+
+  describe('Refresh', () => {
+    it('keeps the original login time instead of restamping it', async () => {
+      const { service, jwtService } = BuildService();
+
+      await service.Refresh({
+        id: 'user-1',
+        email: 'ana@popravime.me',
+        role: UserRole.Customer,
+        authTime: 1700000000,
+      });
+
+      const payload = (jwtService.signAsync as jest.Mock).mock.calls[0][0] as {
+        authTime?: number;
+      };
+      expect(payload.authTime).toBe(1700000000);
+    });
+
+    it('leaves the login time unset when the old token had none', async () => {
+      const { service, jwtService } = BuildService();
+
+      await service.Refresh({
+        id: 'user-1',
+        email: 'ana@popravime.me',
+        role: UserRole.Customer,
+      });
+
+      const payload = (jwtService.signAsync as jest.Mock).mock.calls[0][0] as {
+        authTime?: number;
+      };
+      expect(payload.authTime).toBeUndefined();
     });
   });
 

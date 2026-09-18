@@ -37,6 +37,7 @@ export const EnvValidationSchema = Joi.object({
   JWT_ACCESS_EXPIRES_IN_SECONDS: Joi.number().default(900),
   REFRESH_SECRET: Joi.string().min(16).required(),
   JWT_REFRESH_EXPIRES_IN_SECONDS: Joi.number().default(604800),
+  REAUTH_WINDOW_SECONDS: Joi.number().integer().min(60).default(600),
 
   BCRYPT_SALT_ROUNDS: Joi.number().min(4).max(15).default(10),
 
@@ -119,6 +120,7 @@ export const EnvValidationSchema = Joi.object({
   EMAIL_CONFIRMATION_TTL_SECONDS: Joi.number().default(86400),
 
   LEGAL_TERMS_VERSION: Joi.string().default('2026-09-18'),
+  LEGAL_TERMS_CACHE_TTL_SECONDS: Joi.number().integer().min(1).default(300),
 
   RETENTION_INACTIVE_ACCOUNTS_DAYS: Joi.number().integer().min(1).default(60),
   RETENTION_COMPLETED_REQUESTS_DAYS: Joi.number().integer().min(1).default(730),

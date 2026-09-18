@@ -4,6 +4,7 @@ import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { AccountErasureRepository } from './account-erasure.repository';
 import { IAccountErasureService } from './account-erasure.service.interface';
 import { AccountRevocationService } from '../auth/account-revocation.service';
+import { RecentAuthenticationService } from '../auth/recent-authentication.service';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { jwtConfig } from '../../config/jwt.config';
 import { StorageCleanupService } from '../infra/storage/storage-cleanup.service';
@@ -17,6 +18,7 @@ export class AccountErasureService implements IAccountErasureService {
   constructor(
     private readonly accountErasureRepository: AccountErasureRepository,
     private readonly accountRevocationService: AccountRevocationService,
+    private readonly recentAuthenticationService: RecentAuthenticationService,
     private readonly auditLogsService: AuditLogsService,
     private readonly storageCleanupService: StorageCleanupService,
     @Inject(jwtConfig.KEY)
@@ -26,6 +28,7 @@ export class AccountErasureService implements IAccountErasureService {
   ) {}
 
   async Erase(user: AuthenticatedUser): Promise<void> {
+    this.recentAuthenticationService.Ensure(user);
     this.EnsureErasable(user);
     await this.EnsureNoActiveWork(user.id);
     await this.EraseAccount(user.id, 'account.erased');

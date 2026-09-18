@@ -32,6 +32,11 @@ export class AccessTokenStrategy extends PassportStrategy(
       throw new UnauthorizedException('Account no longer exists');
     }
 
-    return { id: payload.sub, email: payload.email, role: payload.role };
+    return {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      authTime: payload.authTime,
+    };
   }
 }

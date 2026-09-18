@@ -269,6 +269,19 @@ contact details are removed. Access and refresh tokens stop working immediately.
 accepted offer on one, and with `403 ADMIN_ACCOUNT_NOT_ERASABLE` for admins. Both endpoints use
 the auth rate limit.
 
+**Terms are enforced server-side.** Every authenticated endpoint answers `403 TERMS_NOT_ACCEPTED`
+until the user has accepted the current `LEGAL_TERMS_VERSION`. Only `/users/me*` (profile, terms
+acceptance, export, deletion) and the public/refresh/logout auth routes stay open, so a gated user
+can still accept, read or delete their data and log out. Accepting takes effect immediately.
+Bumping `LEGAL_TERMS_VERSION` gates every existing session on its next request, so the frontend
+should treat this error as "send the user to the acceptance page".
+
+**Deleting or exporting needs a recent login.** `DELETE /users/me` and `GET /users/me/export`
+answer `403 REAUTH_REQUIRED` unless the session's original login (`auth_time` in the token, carried
+unchanged through token refreshes) is within `REAUTH_WINDOW_SECONDS` (default 600). The frontend
+asks the user to log in again (password, or Google), which mints tokens with a fresh login time,
+then retries. Tokens issued before this change carry no login time, so they always need one.
+
 Accounts with no activity for 60 days (`RETENTION_INACTIVE_ACCOUNTS_DAYS`) are erased automatically
 the same way, unless they still have accepted work in progress; admins are never purged. Activity
 means any token issue (login, silent refresh on page load, email confirmation, OAuth), recorded at

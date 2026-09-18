@@ -12,9 +12,11 @@ import { AccountExportService } from './account-export.service';
 import { AccountExport } from './account-data.types';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
+import { AllowUnacceptedTerms } from '../../common/decorators/allow-unaccepted-terms.decorator';
 import { AUTH_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
 import { PrivateFileUrlInterceptor } from '../infra/storage/private-file-url.interceptor';
 
+@AllowUnacceptedTerms()
 @Controller('users/me')
 @UseInterceptors(PrivateFileUrlInterceptor)
 export class AccountDataController {
@@ -26,7 +28,7 @@ export class AccountDataController {
   @Throttle(AUTH_THROTTLE)
   @Get('export')
   Export(@CurrentUser() user: AuthenticatedUser): Promise<AccountExport> {
-    return this.accountExportService.Export(user.id);
+    return this.accountExportService.Export(user);
   }
 
   @Throttle(AUTH_THROTTLE)

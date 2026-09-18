@@ -14,6 +14,7 @@ import {
 import { IUsersService } from './users.service.interface';
 import { DomainNotFoundException } from '../../common/exceptions/not-found.exception';
 import { legalConfig } from '../../config/legal.config';
+import { TermsAcceptanceService } from './terms-acceptance.service';
 
 const ACTIVITY_RESOLUTION_MS = 24 * 60 * 60 * 1000;
 
@@ -22,6 +23,7 @@ export class UsersService implements IUsersService {
   constructor(
     private readonly usersRepository: UsersRepository,
     private readonly passwordHasher: PasswordHasher,
+    private readonly termsAcceptanceService: TermsAcceptanceService,
     @Inject(legalConfig.KEY)
     private readonly legal: ConfigType<typeof legalConfig>,
   ) {}
@@ -130,7 +132,9 @@ export class UsersService implements IUsersService {
     const user = await this.FindById(id);
     user.termsAcceptedAt = new Date();
     user.termsVersion = this.legal.termsVersion;
-    return this.usersRepository.Save(user);
+    const saved = await this.usersRepository.Save(user);
+    await this.termsAcceptanceService.Invalidate(id);
+    return saved;
   }
 
   async TouchActivity(id: string): Promise<void> {

@@ -60,7 +60,7 @@ function BuildService(inquiry: DirectInquiry) {
     providersService,
     usersService,
     notificationsService,
-    { termsVersion: '2026-09-18' },
+    { termsVersion: '2026-09-18', termsCacheTtlSeconds: 300 },
     logger,
   );
 
