@@ -238,8 +238,8 @@ export class OffersService implements IOffersService {
   }
 
   // Orchestrates both halves of "customer stops working with an already-accepted provider":
-  // RepairRequestsService.Reopen() flips the request back to Open (and re-notifies every
-  // eligible provider as if it were new), then this cancels the offer that used to be accepted
+  // RepairRequestsService.Reopen() flips the request back to Open (bounded by the per-request
+  // reopen limit), then this cancels the offer that used to be accepted
   // and lets its provider know. One transaction, so a crash mid-way can't leave the request
   // reopened while its old offer still reads Accepted, or vice versa.
   @Transactional()

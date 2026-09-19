@@ -77,6 +77,9 @@ export class RepairRequest {
   @JoinColumn({ name: 'accepted_offer_id' })
   acceptedOffer: Offer | null;
 
+  @Column({ name: 'reopen_count', type: 'integer', default: 0 })
+  reopenCount: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

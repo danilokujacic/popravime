@@ -20,6 +20,7 @@ function BuildRequest(overrides?: Partial<RepairRequest>): RepairRequest {
     customerId: 'customer-1',
     status: RequestStatus.Open,
     urgency: Urgency.Standard,
+    reopenCount: 0,
     ...overrides,
   } as RepairRequest;
 }
@@ -76,10 +77,14 @@ function BuildService(request: RepairRequest) {
     frontendUrl: 'http://localhost:3000',
   } as unknown as ConstructorParameters<typeof RepairRequestsService>[8];
 
+  const limits = {
+    maxReopens: 2,
+  } as unknown as ConstructorParameters<typeof RepairRequestsService>[9];
+
   const logger = {
     info: jest.fn(),
     warn: jest.fn(),
-  } as unknown as ConstructorParameters<typeof RepairRequestsService>[9];
+  } as unknown as ConstructorParameters<typeof RepairRequestsService>[10];
 
   const service = new RepairRequestsService(
     repairRequestsRepository,
@@ -91,6 +96,7 @@ function BuildService(request: RepairRequest) {
     categoriesService,
     citiesService,
     app,
+    limits,
     logger,
   );
 
@@ -476,6 +482,7 @@ describe('RepairRequestsService.Reopen', () => {
     expect(repairRequestsRepository.TryReopen).toHaveBeenCalledWith(
       'request-1',
       [RequestStatus.Accepted, RequestStatus.InProgress],
+      2,
     );
     expect(notificationsService.Notify).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'request_reopened' }),
@@ -494,7 +501,7 @@ describe('RepairRequestsService.Reopen', () => {
     expect(result.status).toBe(RequestStatus.Open);
   });
 
-  it('re-notifies eligible providers on reopen, same as a fresh moderation approval', async () => {
+  it('does not notify providers of the request again on reopen', async () => {
     const request = BuildRequest({
       status: RequestStatus.Accepted,
       acceptedOfferId: 'offer-1',
@@ -513,14 +520,53 @@ describe('RepairRequestsService.Reopen', () => {
 
     await service.Reopen('request-1', 'customer-1');
 
-    // One call for the customer's reopen confirmation, one for the eligible provider.
-    expect(notificationsService.Notify).toHaveBeenCalledTimes(2);
-    expect(notificationsService.Notify).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 'owner-1',
-        type: 'new_repair_request',
-      }),
+    expect(providersService.ListEligibleForCategory).not.toHaveBeenCalled();
+    expect(notificationsService.Notify).toHaveBeenCalledTimes(1);
+    expect(notificationsService.Notify).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'new_repair_request' }),
     );
+  });
+
+  it('counts each successful reopen once', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.Accepted,
+      acceptedOfferId: 'offer-1',
+      reopenCount: 1,
+    });
+    const { service } = BuildService(request);
+
+    const result = await service.Reopen('request-1', 'customer-1');
+
+    expect(result.reopenCount).toBe(2);
+  });
+
+  it('rejects a reopen once the limit is reached, without touching the request', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.Accepted,
+      acceptedOfferId: 'offer-1',
+      reopenCount: 2,
+    });
+    const { service, repairRequestsRepository, notificationsService } =
+      BuildService(request);
+
+    await expect(
+      service.Reopen('request-1', 'customer-1'),
+    ).rejects.toMatchObject({ code: 'REPAIR_REQUEST_REOPEN_LIMIT' });
+    expect(repairRequestsRepository.TryReopen).not.toHaveBeenCalled();
+    expect(notificationsService.Notify).not.toHaveBeenCalled();
+  });
+
+  it('still allows the last reopen just under the limit', async () => {
+    const request = BuildRequest({
+      status: RequestStatus.Accepted,
+      acceptedOfferId: 'offer-1',
+      reopenCount: 1,
+    });
+    const { service, repairRequestsRepository } = BuildService(request);
+
+    await service.Reopen('request-1', 'customer-1');
+
+    expect(repairRequestsRepository.TryReopen).toHaveBeenCalledTimes(1);
   });
 
   it('rejects reopening a request with no accepted offer', async () => {

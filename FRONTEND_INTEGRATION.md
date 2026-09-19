@@ -446,6 +446,7 @@ it as a state machine, not just a form.
 | GET | `/repair-requests/:id` | any authenticated | a `customer` gets `403` on a request that isn't theirs; a `provider_owner` gets `403` on one still `pending_review`/`rejected`, outside their serviced categories, or serviced only by a `pending`/`rejected` provider of theirs; `admin` can view any |
 | POST | `/repair-requests` | `customer` | multipart, see below — an account is required |
 | PATCH | `/repair-requests/:id/status` | `customer`, must own it | body: `{status}` |
+| POST | `/repair-requests/:id/reopen` | `customer`, must own it | no body — cancels the accepted offer and moves the request back to `open`; see below |
 | PATCH | `/repair-requests/:id/approve` | `admin` | body: `{review_notes?}` — moves `pending_review` → `open` |
 | PATCH | `/repair-requests/:id/reject` | `admin` | body: `{review_notes?}` — moves `pending_review` → `rejected` |
 
@@ -472,6 +473,17 @@ into an action that's certain to fail. `open`/`offers_received`/`accepted`/`in_p
 `offers_received`/`accepted` transitions specifically also happen automatically as a side effect
 of the offers flow below (don't build a manual "advance to offers_received" button — it happens
 when a provider submits an offer).
+
+**`POST /repair-requests/:id/reopen`** — for a request in `accepted`/`in_progress`: cancels the
+accepted offer (its provider gets an `offer_cancelled` notification), sets the request back to
+`open` and returns it. Providers are **not** re-notified about the request; they already saw it
+when it was approved and still find it in their open-requests list. A request can be reopened at
+most `REPAIR_REQUEST_MAX_REOPENS` times (default 2); after that the API returns `409
+REPAIR_REQUEST_REOPEN_LIMIT` and the request stays as it was. The frontend should treat that as a
+final answer, not retry, and show a message like "This request was already reopened the maximum
+number of times — create a new request instead". Other errors: `409 REPAIR_REQUEST_NOT_ACCEPTED`
+(no accepted offer), `409 REPAIR_REQUEST_REOPEN_RACE_LOST` (status changed concurrently; refetch),
+`409 INVALID_STATUS_TRANSITION`.
 
 Response shape: `{id, customer_id, category_id, brand, model, description, photo_urls: [url,
 ...], city_id, urgency, status, accepted_offer_id, created_at}`.

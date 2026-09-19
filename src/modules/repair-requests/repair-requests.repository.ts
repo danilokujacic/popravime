@@ -109,13 +109,19 @@ export class RepairRequestsRepository {
   async TryReopen(
     id: string,
     fromStatuses: RequestStatus[],
+    maxReopens: number,
   ): Promise<boolean> {
     const result = await this.repository
       .createQueryBuilder()
       .update(RepairRequest)
-      .set({ status: RequestStatus.Open, acceptedOfferId: null })
+      .set({
+        status: RequestStatus.Open,
+        acceptedOfferId: null,
+        reopenCount: () => 'reopen_count + 1',
+      })
       .where('id = :id', { id })
       .andWhere('status IN (:...fromStatuses)', { fromStatuses })
+      .andWhere('reopen_count < :maxReopens', { maxReopens })
       .execute();
     return (result.affected ?? 0) > 0;
   }

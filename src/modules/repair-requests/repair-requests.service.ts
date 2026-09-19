@@ -28,6 +28,7 @@ import { CitiesService } from '../cities/cities.service';
 import { UserRole } from '../users/users.types';
 import type { AuthenticatedUser } from '../../common/interfaces/authenticated-request.interface';
 import { appConfig } from '../../config/app.config';
+import { repairRequestsConfig } from '../../config/repair-requests.config';
 
 const STATUS_CHANGE_NOTIFIABLE = new Set<RequestStatus>([
   RequestStatus.InProgress,
@@ -54,6 +55,8 @@ export class RepairRequestsService implements IRepairRequestsService {
     private readonly citiesService: CitiesService,
     @Inject(appConfig.KEY)
     private readonly app: ConfigType<typeof appConfig>,
+    @Inject(repairRequestsConfig.KEY)
+    private readonly limits: ConfigType<typeof repairRequestsConfig>,
     @InjectPinoLogger(RepairRequestsService.name)
     private readonly logger: PinoLogger,
   ) {}
@@ -247,8 +250,7 @@ export class RepairRequestsService implements IRepairRequestsService {
 
   // Only reachable once a request is Open — pending_review/rejected requests aren't viewable by
   // providers yet (EnsureViewable throws REPAIR_REQUEST_NOT_MODERATED), so notifying them any
-  // earlier would hand out a preview link that 403s. Public: also called from Reopen(), which
-  // fans this same "new request" email back out to every eligible provider.
+  // earlier would hand out a preview link that 403s.
   async NotifyProvidersOfNewRequest(request: RepairRequest): Promise<void> {
     const [category, city, providers] = await Promise.all([
       this.categoriesService.FindById(request.categoryId),
@@ -423,6 +425,7 @@ export class RepairRequestsService implements IRepairRequestsService {
     const request = await this.FindById(id);
     this.EnsureOwnership(request, customerId);
     this.EnsureTransition(id, request.status, RequestStatus.Open);
+    this.EnsureReopenAllowed(request, customerId);
 
     if (!request.acceptedOfferId) {
       this.logger.warn(
@@ -435,10 +438,11 @@ export class RepairRequestsService implements IRepairRequestsService {
       );
     }
 
-    const reopened = await this.repairRequestsRepository.TryReopen(id, [
-      RequestStatus.Accepted,
-      RequestStatus.InProgress,
-    ]);
+    const reopened = await this.repairRequestsRepository.TryReopen(
+      id,
+      [RequestStatus.Accepted, RequestStatus.InProgress],
+      this.limits.maxReopens,
+    );
     if (!reopened) {
       this.logger.warn(
         { requestId: id, customerId },
@@ -452,6 +456,7 @@ export class RepairRequestsService implements IRepairRequestsService {
 
     request.status = RequestStatus.Open;
     request.acceptedOfferId = null;
+    request.reopenCount += 1;
 
     const customer = await this.usersService.FindById(customerId);
     await this.notificationsService.Notify({
@@ -472,11 +477,33 @@ export class RepairRequestsService implements IRepairRequestsService {
       },
     });
 
-    await this.NotifyProvidersOfNewRequest(request);
-
-    this.logger.info({ requestId: id, customerId }, 'Repair request reopened');
+    this.logger.info(
+      { requestId: id, customerId, reopenCount: request.reopenCount },
+      'Repair request reopened',
+    );
 
     return request;
+  }
+
+  private EnsureReopenAllowed(
+    request: RepairRequest,
+    customerId: string,
+  ): void {
+    if (request.reopenCount >= this.limits.maxReopens) {
+      this.logger.warn(
+        {
+          requestId: request.id,
+          customerId,
+          reopenCount: request.reopenCount,
+          maxReopens: this.limits.maxReopens,
+        },
+        'Reopen rejected: reopen limit reached',
+      );
+      throw new DomainConflictException(
+        'REPAIR_REQUEST_REOPEN_LIMIT',
+        'This repair request has already been reopened the maximum number of times',
+      );
+    }
   }
 
   private EnsureOwnership(request: RepairRequest, customerId: string): void {
@@ -493,7 +520,7 @@ export class RepairRequestsService implements IRepairRequestsService {
   }
 
   // Accepted and Open both carry side effects (linking/unlinking an offer, auto-rejecting other
-  // offers, re-notifying eligible providers) that only AcceptOffer/Reopen perform correctly — this
+  // offers, capping reopens) that only AcceptOffer/Reopen perform correctly — this
   // generic status endpoint must not be able to reach either directly.
   private EnsureNotWorkflowManagedStatus(
     id: string,

@@ -121,6 +121,8 @@ export const EnvValidationSchema = Joi.object({
 
   BFF_SHARED_SECRET: Joi.string().min(16).allow('').default(''),
 
+  REPAIR_REQUEST_MAX_REOPENS: Joi.number().integer().min(0).default(2),
+
   LEGAL_TERMS_VERSION: Joi.string().default('2026-09-18'),
   LEGAL_TERMS_HASH: Joi.string()
     .pattern(/^[a-f0-9]{64}$/)
