@@ -126,6 +126,12 @@ describe('Provider approval integration', () => {
     expect(result.items[0].ownerUser.fullName).toBe('Owner waiting-shop');
   });
 
+  it('loads a single provider with its owner, as the admin approval response needs', async () => {
+    const provider = await repository.FindByIdWithOwner(waitingId);
+
+    expect(provider?.ownerUser.fullName).toBe('Owner waiting-shop');
+  });
+
   it('makes a provider public once it is approved', async () => {
     await repository.SetApproved(waitingId, true);
 

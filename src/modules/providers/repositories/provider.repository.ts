@@ -87,6 +87,13 @@ export class ProviderRepository {
     return this.repository.findOne({ where: { id } });
   }
 
+  FindByIdWithOwner(id: string): Promise<Provider | null> {
+    return this.repository.findOne({
+      where: { id },
+      relations: { ownerUser: true },
+    });
+  }
+
   // For notifying providers of a new repair request in their category — owner is loaded so the
   // caller has an email/name to send to without a separate round trip per provider.
   ListEligibleForCategory(categoryId: string): Promise<Provider[]> {

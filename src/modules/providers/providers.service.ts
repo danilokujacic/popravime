@@ -190,7 +190,18 @@ export class ProvidersService implements IProvidersService {
     await this.FindById(id);
     await this.providerRepository.SetApproved(id, approved);
     this.logger.info({ providerId: id, approved }, 'Provider approval changed');
-    return this.FindById(id);
+    return this.FindByIdWithOwner(id);
+  }
+
+  private async FindByIdWithOwner(id: string): Promise<Provider> {
+    const provider = await this.providerRepository.FindByIdWithOwner(id);
+    if (!provider) {
+      throw new DomainNotFoundException(
+        'PROVIDER_NOT_FOUND',
+        'Provider not found',
+      );
+    }
+    return provider;
   }
 
   CountByVerificationStatus(): Promise<Record<VerificationStatus, number>> {

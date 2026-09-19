@@ -393,3 +393,66 @@ describe('ProvidersService.FindPublicById / FindPublicBySlug', () => {
     expect(result.id).toBe('provider-1');
   });
 });
+
+describe('ProvidersService.SetApproved', () => {
+  function BuildService(existing: Provider | null) {
+    const approvedWithOwner = {
+      ...BuildExistingProvider({ approved: true }),
+      ownerUser: { id: 'owner-1', fullName: 'Ana Owner' },
+    } as Provider;
+    const providerRepository = {
+      FindById: jest.fn().mockResolvedValue(existing),
+      SetApproved: jest.fn().mockResolvedValue(undefined),
+      FindByIdWithOwner: jest.fn().mockResolvedValue(approvedWithOwner),
+    } as unknown as ProviderRepository;
+    const providerCategoryRepository =
+      {} as unknown as ProviderCategoryRepository;
+    const verification = {
+      required: true,
+    } as unknown as ConstructorParameters<typeof ProvidersService>[4];
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as ConstructorParameters<typeof ProvidersService>[5];
+
+    const service = new ProvidersService(
+      providerRepository,
+      providerCategoryRepository,
+      {} as unknown as CitiesService,
+      {} as unknown as IGeocodingService,
+      verification,
+      logger,
+    );
+
+    return { service, providerRepository };
+  }
+
+  it('returns the provider with its owner loaded, read after the update', async () => {
+    const { service, providerRepository } = BuildService(
+      BuildExistingProvider(),
+    );
+
+    const provider = await service.SetApproved('provider-1', true);
+
+    expect(provider.ownerUser.fullName).toBe('Ana Owner');
+    expect(providerRepository.SetApproved).toHaveBeenCalledWith(
+      'provider-1',
+      true,
+    );
+    expect(
+      (providerRepository.SetApproved as jest.Mock).mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      (providerRepository.FindByIdWithOwner as jest.Mock).mock
+        .invocationCallOrder[0],
+    );
+  });
+
+  it('rejects an unknown provider without changing anything', async () => {
+    const { service, providerRepository } = BuildService(null);
+
+    await expect(service.SetApproved('missing', true)).rejects.toBeInstanceOf(
+      DomainNotFoundException,
+    );
+    expect(providerRepository.SetApproved).not.toHaveBeenCalled();
+  });
+});
