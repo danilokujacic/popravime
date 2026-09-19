@@ -1,5 +1,6 @@
 overrides:
   qs: '>=6.16.0'
+  multer: '^2.3.0'
 
 allowBuilds:
   '@scarf/scarf': false
