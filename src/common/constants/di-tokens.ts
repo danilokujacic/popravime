@@ -1,5 +1,6 @@
 export const STORAGE_SERVICE = Symbol('STORAGE_SERVICE');
 export const EMAIL_SERVICE = Symbol('EMAIL_SERVICE');
+export const EMAIL_LIMIT_REDIS = Symbol('EMAIL_LIMIT_REDIS');
 export const GEOCODING_SERVICE = Symbol('GEOCODING_SERVICE');
 
 export const EMAIL_QUEUE_NAME = 'email';

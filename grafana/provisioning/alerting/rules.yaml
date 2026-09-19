@@ -259,3 +259,41 @@ groups:
                 - evaluator:
                     type: gt
                     params: [5]
+
+      - uid: popravime-email-daily-limit-reached
+        title: Email daily limit reached
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'The global daily email cap was reached and emails are being dropped — check for an abuse wave in the API logs; only confirmation and offer-accepted emails still get through, up to the reserve'
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 900
+              to: 0
+            model:
+              refId: A
+              queryType: range
+              expr: sum(count_over_time({job="popravime-api"} |= "Email daily limit reached" [10m]))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]

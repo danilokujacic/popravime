@@ -132,3 +132,5 @@ export interface EmailJobMetadata {
 }
 
 export type EmailJob = EmailJobMetadata & EmailJobContent;
+
+export type EmailAdmission = 'admitted' | 'disabled' | 'daily-limit-reached';

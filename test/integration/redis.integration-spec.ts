@@ -2,6 +2,8 @@ import { RedisContainer, StartedRedisContainer } from '@testcontainers/redis';
 import KeyvRedis, { Keyv } from '@keyv/redis';
 import { createCache } from 'cache-manager';
 import { Queue, Worker } from 'bullmq';
+import Redis from 'ioredis';
+import { EmailAdmissionService } from '../../src/modules/infra/email/email-admission.service';
 
 jest.setTimeout(120000);
 
@@ -61,5 +63,36 @@ describe('Redis integration', () => {
     await expect(processed).resolves.toBe('hello-from-integration-test');
 
     await queue.close();
+  });
+
+  it('caps emails per UTC day atomically, keeping a reserve for critical kinds', async () => {
+    const redis = new Redis(container.getConnectionUrl());
+    const service = new EmailAdmissionService(redis, {
+      host: 'localhost',
+      port: 1025,
+      secure: false,
+      from: 'no-reply@popravime.me',
+      enabled: true,
+      dailyLimit: 2,
+      dailyCriticalReserve: 1,
+    });
+
+    const nonCritical = await Promise.all(
+      Array.from({ length: 5 }, () => service.Admit('new-message')),
+    );
+    const critical = await Promise.all(
+      Array.from({ length: 3 }, () => service.Admit('email-confirmation')),
+    );
+
+    expect(nonCritical.filter((result) => result === 'admitted')).toHaveLength(
+      2,
+    );
+    expect(critical.filter((result) => result === 'admitted')).toHaveLength(1);
+
+    const counterKey = `email:daily:${new Date().toISOString().slice(0, 10)}`;
+    expect(await redis.get(counterKey)).toBe('3');
+    expect(await redis.ttl(counterKey)).toBeGreaterThan(0);
+
+    await service.onModuleDestroy();
   });
 });

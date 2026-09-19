@@ -64,6 +64,9 @@ export const EnvValidationSchema = Joi.object({
   EMAIL_USER: Joi.string().allow('').optional(),
   EMAIL_PASSWORD: Joi.string().allow('').optional(),
   EMAIL_FROM: Joi.string().default('no-reply@popravime.me'),
+  EMAIL_ENABLED: Joi.boolean().default(true),
+  EMAIL_DAILY_LIMIT: Joi.number().integer().min(0).default(250),
+  EMAIL_DAILY_CRITICAL_RESERVE: Joi.number().integer().min(0).default(25),
 
   THROTTLE_DEFAULT_LIMIT: Joi.number().default(100),
   THROTTLE_DEFAULT_TTL_MS: Joi.number().default(60000),

@@ -15,6 +15,9 @@ function BuildConfig(): EmailConfig {
     user: 'user',
     password: 'password',
     from: 'no-reply@popravime.me',
+    enabled: true,
+    dailyLimit: 250,
+    dailyCriticalReserve: 25,
   };
 }
 

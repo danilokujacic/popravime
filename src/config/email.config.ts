@@ -7,6 +7,9 @@ export interface EmailConfig {
   user?: string;
   password?: string;
   from: string;
+  enabled: boolean;
+  dailyLimit: number;
+  dailyCriticalReserve: number;
 }
 
 export const emailConfig = registerAs('email', (): EmailConfig => ({
@@ -16,4 +19,7 @@ export const emailConfig = registerAs('email', (): EmailConfig => ({
   user: process.env.EMAIL_USER || undefined,
   password: process.env.EMAIL_PASSWORD || undefined,
   from: process.env.EMAIL_FROM ?? 'no-reply@popravime.me',
+  enabled: process.env.EMAIL_ENABLED !== 'false',
+  dailyLimit: Number(process.env.EMAIL_DAILY_LIMIT ?? 250),
+  dailyCriticalReserve: Number(process.env.EMAIL_DAILY_CRITICAL_RESERVE ?? 25),
 }));
