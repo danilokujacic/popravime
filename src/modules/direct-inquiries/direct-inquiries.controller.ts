@@ -26,6 +26,7 @@ import type { AuthenticatedUser } from '../../common/interfaces/authenticated-re
 import { UserRole } from '../users/users.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { DIRECT_INQUIRY_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
+import { TurnstileGuard } from '../infra/turnstile/turnstile.guard';
 
 @Controller('direct-inquiries')
 export class DirectInquiriesController {
@@ -34,7 +35,7 @@ export class DirectInquiriesController {
   ) {}
 
   @Public()
-  @UseGuards(OptionalAuthGuard)
+  @UseGuards(OptionalAuthGuard, TurnstileGuard)
   @Throttle(DIRECT_INQUIRY_THROTTLE)
   @Post()
   async Create(

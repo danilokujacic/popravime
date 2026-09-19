@@ -12,6 +12,7 @@ import {
 import type { Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
+import { RequireTurnstile } from '../infra/turnstile/require-turnstile.decorator';
 import { AuthService } from './auth.service';
 import { OAuthExchangeService } from './oauth-exchange.service';
 import { RegisterDto } from './dto/register.dto';
@@ -45,6 +46,7 @@ export class AuthController {
 
   @Public()
   @Throttle(AUTH_THROTTLE)
+  @RequireTurnstile()
   @Post('register')
   Register(
     @Body() dto: RegisterDto,
@@ -72,6 +74,7 @@ export class AuthController {
 
   @Public()
   @Throttle(RESEND_CONFIRMATION_THROTTLE)
+  @RequireTurnstile()
   @HttpCode(HttpStatus.NO_CONTENT)
   @Post('resend-confirmation')
   ResendConfirmation(@Body() dto: ResendConfirmationDto): Promise<void> {

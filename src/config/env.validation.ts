@@ -21,6 +21,18 @@ export const EnvValidationSchema = Joi.object({
   // trims any trailing slash). No strict URI validation: a wrong value degrades to a broken
   // link, not a security issue.
   FRONTEND_URL: Joi.string().default('http://localhost:3000'),
+  TURNSTILE_SECRET_KEY: Joi.string()
+    .allow('')
+    .when('NODE_ENV', {
+      is: 'production',
+      then: Joi.string().invalid('').required().messages({
+        'any.required':
+          'TURNSTILE_SECRET_KEY must be set in production — captcha verification would be skipped without it',
+        'any.invalid':
+          'TURNSTILE_SECRET_KEY must not be empty in production — captcha verification would be skipped without it',
+      }),
+      otherwise: Joi.string().optional(),
+    }),
 
   DATABASE_HOST: Joi.string().required(),
   DATABASE_PORT: Joi.number().port().default(5432),

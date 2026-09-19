@@ -8,8 +8,9 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { TurnstileProtectedDto } from '../../infra/turnstile/dto/turnstile-protected.dto';
 
-export class CreateDirectInquiryDto {
+export class CreateDirectInquiryDto extends TurnstileProtectedDto {
   @IsUUID()
   @Expose({ name: 'provider_id' })
   providerId: string;

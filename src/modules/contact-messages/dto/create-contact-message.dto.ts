@@ -1,6 +1,7 @@
 import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import { TurnstileProtectedDto } from '../../infra/turnstile/dto/turnstile-protected.dto';
 
-export class CreateContactMessageDto {
+export class CreateContactMessageDto extends TurnstileProtectedDto {
   @IsString()
   @MinLength(2)
   @MaxLength(120)

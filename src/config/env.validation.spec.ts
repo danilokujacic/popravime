@@ -58,7 +58,42 @@ describe('EnvValidationSchema', () => {
       BuildBaseEnv({
         NODE_ENV: 'production',
         CORS_ORIGIN: 'https://popravime.me',
+        TURNSTILE_SECRET_KEY: 'turnstile-secret',
       }),
+      { abortEarly: false },
+    );
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it('rejects a production env with TURNSTILE_SECRET_KEY unset', () => {
+    const result = EnvValidationSchema.validate(
+      BuildBaseEnv({
+        NODE_ENV: 'production',
+        CORS_ORIGIN: 'https://popravime.me',
+      }),
+      { abortEarly: false },
+    );
+
+    expect(result.error?.message).toContain('TURNSTILE_SECRET_KEY');
+  });
+
+  it('rejects a production env with TURNSTILE_SECRET_KEY empty', () => {
+    const result = EnvValidationSchema.validate(
+      BuildBaseEnv({
+        NODE_ENV: 'production',
+        CORS_ORIGIN: 'https://popravime.me',
+        TURNSTILE_SECRET_KEY: '',
+      }),
+      { abortEarly: false },
+    );
+
+    expect(result.error?.message).toContain('TURNSTILE_SECRET_KEY');
+  });
+
+  it('accepts a development env with TURNSTILE_SECRET_KEY empty', () => {
+    const result = EnvValidationSchema.validate(
+      BuildBaseEnv({ NODE_ENV: 'development', TURNSTILE_SECRET_KEY: '' }),
       { abortEarly: false },
     );
 

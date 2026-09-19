@@ -14,11 +14,13 @@ import { FacebookStrategy } from './strategies/facebook.strategy';
 import { RefreshTokenDenylistService } from './refresh-token-denylist.service';
 import { AccountRevocationService } from './account-revocation.service';
 import { RecentAuthenticationService } from './recent-authentication.service';
+import { TurnstileModule } from '../infra/turnstile/turnstile.module';
 
 @Module({
   imports: [
     UsersModule,
     EmailModule,
+    TurnstileModule,
     EmailConfirmationsModule,
     PassportModule,
     JwtModule.register({}),

@@ -5,9 +5,14 @@ import { ContactMessagesRepository } from './contact-messages.repository';
 import { ContactMessagesService } from './contact-messages.service';
 import { ContactMessagesController } from './contact-messages.controller';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
+import { TurnstileModule } from '../infra/turnstile/turnstile.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ContactMessage]), AuditLogsModule],
+  imports: [
+    TypeOrmModule.forFeature([ContactMessage]),
+    AuditLogsModule,
+    TurnstileModule,
+  ],
   controllers: [ContactMessagesController],
   providers: [ContactMessagesRepository, ContactMessagesService],
   exports: [ContactMessagesService],

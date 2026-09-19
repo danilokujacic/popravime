@@ -115,9 +115,9 @@ navigate to is meaningfully different from a `provider_owner`, which is differen
 
 | Method | Path | Auth | Body |
 |---|---|---|---|
-| POST | `/auth/register` | public | `{email, password, repeat_password, full_name, phone?, role}` — `repeat_password` must equal `password` (`400 VALIDATION_ERROR`, field `repeat_password` code `MATCHES_FIELD` otherwise); `role` must be `customer` or `provider_owner` (not `admin`). Response is `{email}`, **not tokens** — see §2.1.2 |
+| POST | `/auth/register` | public | `{email, password, repeat_password, full_name, phone?, role, turnstile_token}` (captcha — §14) — `repeat_password` must equal `password` (`400 VALIDATION_ERROR`, field `repeat_password` code `MATCHES_FIELD` otherwise); `role` must be `customer` or `provider_owner` (not `admin`). Response is `{email}`, **not tokens** — see §2.1.2 |
 | POST | `/auth/confirm-email` | public | `{slug}` → `{access_token, refresh_token}` — see §2.1.2 |
-| POST | `/auth/resend-confirmation` | public, throttled | `{email}` → `204 No Content` — see §2.1.2 |
+| POST | `/auth/resend-confirmation` | public, throttled | `{email, turnstile_token}` (captcha — §14) → `204 No Content` — see §2.1.2 |
 | POST | `/auth/login` | public | `{email, password}` → `403 EMAIL_NOT_VERIFIED` if the account is a plain registration that hasn't confirmed yet (see §2.1.2) |
 | POST | `/auth/refresh` | public* | `{refresh_token}` |
 | POST | `/auth/logout` | public* | `{refresh_token}` |
@@ -607,7 +607,7 @@ usable by a logged-in customer *or* a fully anonymous visitor.
 | PATCH | `/direct-inquiries/:id/status` | `provider_owner`, must own it | body: `{status}` (`new`/`contacted`/`closed`) |
 
 **`POST /direct-inquiries`** body: `{provider_id, name?, contact_email?, contact_phone?,
-message}`. If the caller sends a valid `Authorization` header, the inquiry is automatically
+message, turnstile_token?}` (`turnstile_token` is required only for anonymous visitors — §14). If the caller sends a valid `Authorization` header, the inquiry is automatically
 attributed to their account (`customer_id` populated) and `name`/`contact_email`/
 `contact_phone` become unnecessary. If there's no token (anonymous visitor), `name` plus at
 least one of `contact_email`/`contact_phone` become **required** (`400
@@ -714,7 +714,7 @@ section of the frontend (blog, FAQ, price guide).
 | POST/PATCH/DELETE | `/faq-items[/:id]` | `admin` | `{question, answer, category, sort_order?}` |
 | GET | `/price-estimates` | public | not paginated; query: `category_id?` |
 | POST/PATCH/DELETE | `/price-estimates[/:id]` | `admin` | `{category_id, service_type, price_min, price_max, currency?}` (prices are numeric strings, currency defaults `EUR`) |
-| POST | `/contact-messages` | public | `{name, email, subject, message}` — rate-limited, expect occasional `429` on a public contact form, handle it with a friendly "try again shortly" message |
+| POST | `/contact-messages` | public | `{name, email, subject, message, turnstile_token}` (captcha — §14) — rate-limited, expect occasional `429` on a public contact form, handle it with a friendly "try again shortly" message |
 | GET | `/contact-messages` | `admin` | paginated; query: `status?` |
 | PATCH | `/contact-messages/:id/status` | `admin` | `{status}` (`new`/`in_progress`/`resolved`) |
 
@@ -792,3 +792,21 @@ headers are ignored. Set the same secret as `BACKEND_SHARED_SECRET` on the front
 **Confirmation emails.** At most `THROTTLE_CONFIRMATION_EMAIL_LIMIT` (3) per address per hour, over
 and above the per-IP limits; further requests are dropped silently. `POST
 /auth/resend-confirmation` returns `204` for unknown and already-confirmed addresses too.
+
+**Captcha (Cloudflare Turnstile).** `POST /auth/register`, `POST /auth/resend-confirmation`, `POST
+/contact-messages` and `POST /direct-inquiries` (anonymous callers only — a request with a valid
+`Authorization` header skips the check) must carry the widget's token in the body as
+`turnstile_token` (string, max 2048 chars). The API verifies it with Cloudflare, using the real
+client IP, before doing anything else; a missing, invalid, expired or already-used token — or
+Cloudflare being unreachable — returns `403 CAPTCHA_FAILED`. Login and every other authenticated
+endpoint have no captcha.
+
+- Tokens are **single-use**, and are spent even if the request then fails validation (`400`). After
+  any failed submit, reset the widget (`turnstile.reset()`) and let the user solve a fresh one
+  before retrying.
+- Tokens expire after 5 minutes, so a form left open for long needs a fresh one too.
+- Show a "verification failed, please try again" message for `CAPTCHA_FAILED` and reset the widget.
+- Where the API has no `TURNSTILE_SECRET_KEY` (local development only — production refuses to start
+  without it) the check is skipped and the field may be omitted. Cloudflare's test secrets also work
+  locally: `1x0000000000000000000000000000000AA` always passes, `2x0000000000000000000000000000000AA`
+  always fails (use the matching test site keys in the widget).

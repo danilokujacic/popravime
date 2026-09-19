@@ -24,6 +24,7 @@ import type { AuthenticatedUser } from '../../common/interfaces/authenticated-re
 import { UserRole } from '../users/users.types';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { CONTACT_MESSAGE_THROTTLE } from '../infra/rate-limit/rate-limit.constants';
+import { RequireTurnstile } from '../infra/turnstile/require-turnstile.decorator';
 
 @Controller('contact-messages')
 export class ContactMessagesController {
@@ -33,6 +34,7 @@ export class ContactMessagesController {
 
   @Public()
   @Throttle(CONTACT_MESSAGE_THROTTLE)
+  @RequireTurnstile()
   @Post()
   async Create(
     @Body() dto: CreateContactMessageDto,

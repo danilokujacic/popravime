@@ -157,6 +157,7 @@ Copy `.env.example` to `.env` on the Hetzner host and fill in real values:
 | `STORAGE_*` | From Cloudflare R2 (§2) |
 | `JWT_SECRET` / `REFRESH_SECRET` | Freshly generated, ≥16 chars each — **not** the repo's dev defaults |
 | `CORS_ORIGIN` | The real frontend origin(s), comma-separated. Required and must not be empty/`*` — the app now fails fast at boot in production if this is missing (see spec: Production CORS allow-list) |
+| `TURNSTILE_SECRET_KEY` | Secret key of the Cloudflare Turnstile widget the frontend uses. Required in production — the app fails fast at boot without it, since captcha verification would otherwise be skipped. The frontend must send `turnstile_token` before this is switched on (see `FRONTEND_INTEGRATION.md` §14) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Bootstrap admin account credentials |
 | `EMAIL_*` | A real SMTP relay — not Maildev |
 | `PORT` | Leave unset (defaults to `3000`) — `docker-compose.prod.yml` publishes it on `127.0.0.1:3000`, which the host nginx's upstream points at |
@@ -175,9 +176,10 @@ docker compose -f docker-compose.prod.yml up -d redis loki node-exporter cadviso
 
 Bring these up **before** `api` (§10) — `depends_on: loki/prometheus: condition: service_healthy`
 on `api`/`grafana` needs both already up. After Grafana starts, open it over the SSH tunnel
-(§3) and check **Alerting → Alert rules** for the four rules in
+(§3) and check **Alerting → Alert rules** for the rules in
 `grafana/provisioning/alerting/rules.yaml` (High CPU usage, High memory usage, Low disk space,
-High application error rate) — confirm each shows "Normal" with no provisioning/parse error, and
+High application error rate, Outbound email spike, Email limits are being hit, Email daily limit
+reached) — confirm each shows "Normal" with no provisioning/parse error, and
 send a test notification from **Alerting → Contact points → ops-email** to confirm mail actually
 reaches `ALERT_EMAIL_TO` through the Brevo relay. This file was written against Grafana 10.4.2's
 documented alert-provisioning schema but not exercised against a live instance before being

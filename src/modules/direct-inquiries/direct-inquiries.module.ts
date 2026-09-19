@@ -8,6 +8,7 @@ import { DirectInquiriesController } from './direct-inquiries.controller';
 import { ProvidersModule } from '../providers/providers.module';
 import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { TurnstileModule } from '../infra/turnstile/turnstile.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ProvidersModule,
     UsersModule,
     NotificationsModule,
+    TurnstileModule,
   ],
   controllers: [DirectInquiriesController],
   providers: [DirectInquiriesRepository, DirectInquiriesService],

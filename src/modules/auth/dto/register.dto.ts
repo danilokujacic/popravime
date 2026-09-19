@@ -13,13 +13,14 @@ import {
 } from 'class-validator';
 import { MatchesField } from '../../../common/validators/matches-field.decorator';
 import { UserRole } from '../../users/users.types';
+import { TurnstileProtectedDto } from '../../infra/turnstile/dto/turnstile-protected.dto';
 
 export const REGISTERABLE_ROLES = [
   UserRole.Customer,
   UserRole.ProviderOwner,
 ] as const;
 
-export class RegisterDto {
+export class RegisterDto extends TurnstileProtectedDto {
   @IsEmail()
   email: string;
 

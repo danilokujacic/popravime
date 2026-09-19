@@ -14,6 +14,7 @@ import { retentionConfig } from './retention.config';
 import { legalConfig } from './legal.config';
 import { clientIpConfig } from './client-ip.config';
 import { repairRequestsConfig } from './repair-requests.config';
+import { turnstileConfig } from './turnstile.config';
 
 export const ConfigNamespaces = [
   appConfig,
@@ -32,4 +33,5 @@ export const ConfigNamespaces = [
   legalConfig,
   clientIpConfig,
   repairRequestsConfig,
+  turnstileConfig,
 ];
