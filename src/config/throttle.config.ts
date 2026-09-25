@@ -10,7 +10,11 @@ export interface ThrottleConfig {
 }
 
 export const throttleConfig = registerAs('throttle', (): ThrottleConfig => ({
-  defaultLimit: Number(process.env.THROTTLE_DEFAULT_LIMIT ?? 100),
+  // Per client IP per TTL, for every route without its own tighter limit (auth, offers, inquiries,
+  // messages… — see rate-limit.constants.ts). High enough that a search-engine crawler never hits
+  // it: each server-rendered frontend page makes ~2–3 API calls, and until BFF_SHARED_SECRET is set
+  // on both sides every page render counts against the frontend server's single IP.
+  defaultLimit: Number(process.env.THROTTLE_DEFAULT_LIMIT ?? 3000),
   defaultTtlMs: Number(process.env.THROTTLE_DEFAULT_TTL_MS ?? 60000),
   authLimit: Number(process.env.THROTTLE_AUTH_LIMIT ?? 5),
   authTtlMs: Number(process.env.THROTTLE_AUTH_TTL_MS ?? 60000),

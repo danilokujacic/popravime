@@ -80,7 +80,8 @@ export const EnvValidationSchema = Joi.object({
   EMAIL_DAILY_LIMIT: Joi.number().integer().min(0).default(250),
   EMAIL_DAILY_CRITICAL_RESERVE: Joi.number().integer().min(0).default(25),
 
-  THROTTLE_DEFAULT_LIMIT: Joi.number().default(100),
+  // See throttle.config.ts for why this is high: it must never throttle a search-engine crawler.
+  THROTTLE_DEFAULT_LIMIT: Joi.number().default(3000),
   THROTTLE_DEFAULT_TTL_MS: Joi.number().default(60000),
   THROTTLE_AUTH_LIMIT: Joi.number().default(5),
   THROTTLE_AUTH_TTL_MS: Joi.number().default(60000),
